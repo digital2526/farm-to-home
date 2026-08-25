@@ -52,6 +52,9 @@ def award_seeds(
     order_id: str | None = None,
     recharge_charge_id: str | None = None,
 ):
+    if amount <= 0:
+        raise ValueError("Seed award amount must be greater than zero.")
+
     try:
         customer = get_or_create_customer(
             db=db,

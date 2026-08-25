@@ -5,19 +5,19 @@ name = "Farm to Home Add Extras"
 application_url = "https://example.com"
 embedded = true
 
-[app_proxy]
-url = "https://occupier-twister-rocket.ngrok-free.dev"
-subpath = "add-extras"
-prefix = "apps"
-
 [webhooks]
 api_version = "2026-07"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = ""
+scopes = "read_products, read_orders"
 optional_scopes = [ ]
 use_legacy_install_flow = false
 
 [auth]
 redirect_urls = [ ]
+
+[app_proxy]
+url = "https://p01--recharge-add-extras--yj8tfgj8dpk9.code.run"
+subpath = "add-extras"
+prefix = "apps"

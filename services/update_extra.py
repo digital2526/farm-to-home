@@ -2,15 +2,15 @@ from fastapi import HTTPException
 
 from recharge import (
     get_customer_by_shopify_id,
-    subscription_belongs_to_customer,
-    update_subscription_quantity
+    get_valid_extra_subscription,
+    update_subscription_quantity,
 )
 
 
 def update_extra(
     shopify_customer_id,
     subscription_id,
-    quantity
+    quantity,
 ):
 
     customer = get_customer_by_shopify_id(
@@ -25,21 +25,29 @@ def update_extra(
 
     recharge_customer_id = customer["id"]
 
-    if not subscription_belongs_to_customer(
+    subscription = get_valid_extra_subscription(
         recharge_customer_id,
-        subscription_id
-    ):
+        subscription_id,
+    )
+
+    if not subscription:
         raise HTTPException(
             status_code=403,
-            detail="Access denied."
+            detail="Subscription is not an approved extra."
         )
 
-    subscription = update_subscription_quantity(
+    if quantity < 1:
+        raise HTTPException(
+            status_code=400,
+            detail="Quantity must be at least 1."
+        )
+
+    updated = update_subscription_quantity(
         subscription_id,
-        quantity
+        quantity,
     )
 
     return {
         "success": True,
-        "subscription": subscription["subscription"]
+        "subscription": updated["subscription"],
     }

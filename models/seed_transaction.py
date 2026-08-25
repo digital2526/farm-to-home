@@ -5,6 +5,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Enum,
+    UniqueConstraint,
 )
 from enums.transaction_type import TransactionType
 from sqlalchemy.sql import func
@@ -15,6 +16,17 @@ from database import Base
 
 class SeedTransaction(Base):
     __tablename__ = "seed_transactions"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "order_id",
+            name="uq_seed_transaction_order_id",
+        ),
+        UniqueConstraint(
+            "recharge_charge_id",
+            name="uq_seed_transaction_recharge_charge_id",
+        ),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
 
@@ -54,7 +66,7 @@ class SeedTransaction(Base):
         DateTime(timezone=True),
         server_default=func.now(),
     )
-    
+
     customer = relationship(
         "Customer",
         back_populates="transactions",

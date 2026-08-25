@@ -85,17 +85,10 @@ class EmailService:
 
                 server.send_message(message)
 
-            print(
-                f"Email sent successfully to {to_email}"
-            )
-
             return True
 
-        except Exception as e:
+        except Exception:
 
-            print(
-                f"Email error: {e}"
-            )
 
             return False
 

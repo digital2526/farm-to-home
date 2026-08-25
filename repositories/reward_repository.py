@@ -17,6 +17,9 @@ def get_reward_by_id(
 ):
     return (
         db.query(Reward)
-        .filter(Reward.id == reward_id)
+        .filter(
+            Reward.id == reward_id,
+            Reward.active == True,
+        )
         .first()
     )

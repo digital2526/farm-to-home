@@ -1,5 +1,7 @@
-from fastapi import APIRouter, Depends, Header, HTTPException
-from services.db_test import test_database_connection
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from shopify_auth import verify_shopify_proxy
 
 from sqlalchemy.orm import Session
 from config import SYNC_API_KEY
@@ -7,25 +9,21 @@ from config import SYNC_API_KEY
 from database import get_db
 from services.seeds import get_customer_balance, get_or_create_customer, award_seeds
 
-from schemas.customer import CustomerRequest
-
-from schemas.award import AwardSeedsRequest
-
 from services.rewards import list_rewards
 
 from schemas.redeem import RedeemRewardRequest
 from services.redemption import redeem_reward
 from services.history import get_history
 from services.dashboard import get_dashboard
-from models.reward import Reward
 from services.recharge_rewards import sync_recharge_rewards
 
-print("✅ SEEDS ROUTER LOADED") 
 
 router = APIRouter(
     prefix="/seeds",
     tags=["Terramay Seeds"]
 )
+
+limiter = Limiter(key_func=get_remote_address)
 
 @router.get("/health")
 def health():
@@ -34,81 +32,50 @@ def health():
         "service": "Terramay Seeds API"
     }
 
-@router.get("/db-test")
-def database_test():
-    connected = test_database_connection()
-
-    if connected:
-        return {"database": "connected"}
-
-    return {"database": "failed"}
-
-@router.get("/balance/{shopify_customer_id}")
-def balance(
-    shopify_customer_id: str,
+@router.get("/balance")
+@limiter.limit("60/minute")
+async def balance(
+    request: Request,
     db: Session = Depends(get_db),
 ):
-    balance = get_customer_balance(db, shopify_customer_id)
+    shopify_customer_id = await verify_shopify_proxy(request)
+
+    balance = get_customer_balance(
+        db,
+        shopify_customer_id,
+    )
 
     return {
         "shopify_customer_id": shopify_customer_id,
         "balance": balance,
     }
     
-@router.post("/customer")
-def create_customer(
-    request: CustomerRequest,
-    db: Session = Depends(get_db),
-):
-    customer = get_or_create_customer(
-        db=db,
-        shopify_customer_id=request.shopify_customer_id,
-        email=request.email,
-    )
-
-    return {
-        "id": customer.id,
-        "shopify_customer_id": customer.shopify_customer_id,
-        "email": customer.email,
-        "balance": customer.current_balance,
-    }
-    
-@router.post("/award")
-def award(
-    request: AwardSeedsRequest,
-    db: Session = Depends(get_db),
-):
-    customer = award_seeds(
-        db=db,
-        shopify_customer_id=request.shopify_customer_id,
-        email=request.email,
-        amount=request.amount,
-        reason=request.reason,
-        order_id=request.order_id,
-    )
-
-    return {
-        "customer_id": customer.id,
-        "shopify_customer_id": customer.shopify_customer_id,
-        "balance": customer.current_balance,
-    }
-    
 @router.get("/rewards")
-def rewards(
+@limiter.limit("60/minute")
+async def rewards(
+    request: Request,
     db: Session = Depends(get_db),
 ):
+    # Authenticate the Shopify customer before returning
+    # customer-facing reward data.
+    await verify_shopify_proxy(request)
+
     rewards = list_rewards(db)
 
     return rewards
 
 @router.post("/redeem")
-def redeem(
+@limiter.limit("5/minute")
+async def redeem(
     request: RedeemRewardRequest,
+    http_request: Request,
     db: Session = Depends(get_db),
 ):
+    shopify_customer_id = await verify_shopify_proxy(http_request)
+
     customer = redeem_reward(
         db=db,
-        shopify_customer_id=request.shopify_customer_id,
+        shopify_customer_id=shopify_customer_id,
         reward_id=request.reward_id,
     )
 
@@ -118,11 +85,14 @@ def redeem(
         "balance": customer.current_balance,
     }
     
-@router.get("/history/{shopify_customer_id}")
-def history(
-    shopify_customer_id: str,
+@router.get("/history")
+@limiter.limit("60/minute")
+async def history(
+    request: Request,
     db: Session = Depends(get_db),
 ):
+    shopify_customer_id = await verify_shopify_proxy(request)
+
     history = get_history(
         db,
         shopify_customer_id,
@@ -130,11 +100,14 @@ def history(
 
     return history
 
-@router.get("/dashboard/{shopify_customer_id}")
-def dashboard(
-    shopify_customer_id: str,
+@router.get("/dashboard")
+@limiter.limit("60/minute")
+async def dashboard(
+    request: Request,
     db: Session = Depends(get_db),
 ):
+    shopify_customer_id = await verify_shopify_proxy(request)
+
     dashboard = get_dashboard(
         db,
         shopify_customer_id,
@@ -152,55 +125,11 @@ def dashboard(
         "rewards": dashboard["rewards"],
         "history": dashboard["history"],
     }
-
-@router.post("/seed-rewards")
-def seed_rewards(db: Session = Depends(get_db)):
-    rewards = [
-        {
-            "name": "Free Soup",
-            "description": "Redeem one free soup",
-            "seed_cost": 100,
-            "reward_type": "free_product",
-            "reward_value": "FREE_SOUP",
-        },
-        {
-            "name": "Free Bread",
-            "description": "Redeem one free bread",
-            "seed_cost": 150,
-            "reward_type": "free_product",
-            "reward_value": "FREE_BREAD",
-        },
-        {
-            "name": "10% Discount",
-            "description": "10% off next order",
-            "seed_cost": 300,
-            "reward_type": "discount",
-            "reward_value": "10_PERCENT",
-        },
-    ]
-
-    added = 0
-
-    for item in rewards:
-        exists = (
-            db.query(Reward)
-            .filter(Reward.name == item["name"])
-            .first()
-        )
-
-        if not exists:
-            db.add(Reward(**item))
-            added += 1
-
-    db.commit()
-
-    return {
-        "status": "success",
-        "added": added,
-    }
     
 @router.post("/sync-recharge")
+@limiter.limit("5/minute")
 def sync_recharge(
+    request: Request,
     db: Session = Depends(get_db),
     x_api_key: str = Header(None),
 ):

@@ -1,39 +1,17 @@
 from sqlalchemy.orm import Session
 
-from repositories.transaction_repository import get_by_order_id
-from services.seed_rules import calculate_seeds
-from services.seeds import award_seeds
-
 
 def process_paid_order(
     db: Session,
     order,
 ):
+    """
+    Shopify paid orders are intentionally NOT a Seeds
+    awarding source.
 
-    existing_transaction = get_by_order_id(
-        db,
-        str(order.id),
-    )
+    Recharge is the authoritative source for Seeds rewards.
+    This prevents a Recharge subscription renewal from being
+    rewarded both by Shopify and Recharge.
+    """
 
-    if existing_transaction:
-        print("Duplicate order")
-        return None
-
-    earned_seeds = calculate_seeds(
-        float(order.subtotal_price)
-    )
-
-    print(f"Seeds awarded: {earned_seeds}")
-
-    customer = award_seeds(
-        db=db,
-        shopify_customer_id=str(order.customer.id),
-        email=order.customer.email,
-        amount=earned_seeds,
-        reason=f"Shopify Order #{order.id}",
-        order_id=str(order.id),
-    )
-
-    print(f"New balance: {customer.current_balance}")
-
-    return customer
+    return None

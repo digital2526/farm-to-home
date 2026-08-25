@@ -6,6 +6,11 @@ load_dotenv()
 RECHARGE_TOKEN = os.getenv("RECHARGE_API_TOKEN")
 SHOPIFY_STORE = os.getenv("SHOPIFY_STORE")
 
+SHOPIFY_API_SECRET = os.getenv("SHOPIFY_API_SECRET")
+
+if not SHOPIFY_API_SECRET:
+    raise RuntimeError("SHOPIFY_API_SECRET is not configured.")
+
 BASE_URL = os.getenv(
     "RECHARGE_BASE_URL",
     "https://api.rechargeapps.com"
@@ -13,6 +18,12 @@ BASE_URL = os.getenv(
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 SYNC_API_KEY = os.getenv("SYNC_API_KEY", "")
+
+EXTRA_VARIANT_IDS = {
+    int(value.strip())
+    for value in os.getenv("EXTRA_VARIANT_IDS", "").split(",")
+    if value.strip()
+}
 
 SHOPIFY_WEBHOOK_SECRET = os.getenv(
     "SHOPIFY_WEBHOOK_SECRET",
@@ -30,10 +41,16 @@ ALLOWED_ORIGINS = os.getenv(
 if not RECHARGE_TOKEN:
     raise RuntimeError("RECHARGE_API_TOKEN is not configured.")
 
+RECHARGE_API_VERSION = os.getenv(
+    "RECHARGE_API_VERSION",
+    "2021-11",
+)
+
 HEADERS = {
     "X-Recharge-Access-Token": RECHARGE_TOKEN,
+    "X-Recharge-Version": RECHARGE_API_VERSION,
     "Accept": "application/json",
-    "Content-Type": "application/json"
+    "Content-Type": "application/json",
 }
 
 # ==========================================

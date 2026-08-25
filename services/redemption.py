@@ -2,7 +2,7 @@ from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 
 from repositories.customer_repository import (
-    get_by_shopify_customer_id,
+    get_for_update_by_shopify_customer_id,
     deduct_balance,
 )
 from repositories.reward_repository import get_reward_by_id
@@ -18,7 +18,7 @@ def redeem_reward(
     shopify_customer_id: str,
     reward_id: int,
 ):
-    customer = get_by_shopify_customer_id(
+    customer = get_for_update_by_shopify_customer_id(
         db,
         shopify_customer_id,
     )

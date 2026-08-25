@@ -13,6 +13,25 @@ def get_by_shopify_customer_id(
         .first()
     )
 
+def get_for_update_by_shopify_customer_id(
+    db: Session,
+    shopify_customer_id: str,
+):
+    """
+    Lock the customer row during balance-changing operations.
+
+    This prevents concurrent redemption requests from spending
+    the same Seeds balance. The production database must support
+    row-level SELECT ... FOR UPDATE semantics.
+    """
+    return (
+        db.query(Customer)
+        .filter(
+            Customer.shopify_customer_id == shopify_customer_id
+        )
+        .with_for_update()
+        .first()
+    )
 
 def create_customer(
     db: Session,

@@ -1,5 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from fastapi import Request
+from fastapi.responses import JSONResponse
+
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 from config import ALLOWED_ORIGINS
 
@@ -12,15 +19,45 @@ from models.customer import Customer  # noqa: F401
 from models.seed_transaction import SeedTransaction  # noqa: F401
 from models.reward import Reward  # noqa: F401
 from models.redemption import Redemption  # noqa: F401
+from models.webhook_delivery import WebhookDelivery  # noqa: F401
 
-print("✅ MAIN.PY WITH SEEDS LOADED")
+limiter = Limiter(key_func=get_remote_address)
 
 app = FastAPI(
     title="Farm to Home Recharge API",
     version="1.0.0",
 )
 
-print("ALLOWED_ORIGINS =", ALLOWED_ORIGINS) 
+MAX_REQUEST_BODY_SIZE = 1 * 1024 * 1024  # 1 MB
+
+
+class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        content_length = request.headers.get("content-length")
+
+        if content_length:
+            try:
+                if int(content_length) > MAX_REQUEST_BODY_SIZE:
+                    return JSONResponse(
+                        status_code=413,
+                        content={"detail": "Request body too large."},
+                    )
+            except ValueError:
+                return JSONResponse(
+                    status_code=400,
+                    content={"detail": "Invalid Content-Length header."},
+                )
+
+        return await call_next(request)
+
+
+app.add_middleware(RequestSizeLimitMiddleware)
+
+app.state.limiter = limiter
+app.add_exception_handler(
+    RateLimitExceeded,
+    _rate_limit_exceeded_handler,
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -35,7 +72,6 @@ app.include_router(subscription_router, prefix="/subscription")
 
 # New Seeds APIs
 app.include_router(seeds_router)
-print(app.routes)
 
 app.include_router(webhook_router)
 
