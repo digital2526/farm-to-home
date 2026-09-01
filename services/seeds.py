@@ -5,6 +5,7 @@ from enums.transaction_type import TransactionType
 
 from repositories.customer_repository import (
     get_by_shopify_customer_id,
+    get_for_update_by_shopify_customer_id,
     create_customer,
 )
 
@@ -61,6 +62,14 @@ def award_seeds(
             shopify_customer_id=shopify_customer_id,
             email=email,
         )
+
+        customer = get_for_update_by_shopify_customer_id(
+            db=db,
+            shopify_customer_id=shopify_customer_id,
+        )
+
+        if not customer:
+            raise ValueError("Customer could not be loaded for update.")
 
         create_transaction(
             db=db,
