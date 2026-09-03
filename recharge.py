@@ -86,8 +86,8 @@ def _request(method, url, *, retry=False, **kwargs):
             raise HTTPException(
                 status_code=status_code,
                 detail=(
-                    "Recharge API request failed "
-                    f"with status {status_code}."
+                    f"Recharge API request failed with status "
+                    f"{status_code}: {response.text}"
                 ),
             ) from exc
 
