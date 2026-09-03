@@ -159,44 +159,38 @@ def get_addresses(customer_id):
 # Create subscription
 # -------------------------------------------------
 
-def create_subscription(
-    address_id,
-    variant_id,
-    quantity,
-    next_charge_date,
-):
+def create_subscription(address_id, variant_id, quantity, next_charge_date):
+
     payload = {
-        "address_id": int(address_id),
-        "external_variant_id": {
-            "ecommerce": str(variant_id)
-        },
+        "address_id": address_id,
+        "shopify_variant_id": int(variant_id),
         "quantity": int(quantity),
 
-        # Recurring every week
         "order_interval_unit": "week",
-        "order_interval_frequency": 1,
-        "charge_interval_frequency": 1,
+        "order_interval_frequency": "1",
+        "charge_interval_frequency": "1",
 
-        # Recharge requires the first charge date.
         "next_charge_scheduled_at": next_charge_date,
 
         "properties": [
             {
                 "name": "subscription_type",
-                "value": "extra",
+                "value": "extra"
             },
             {
                 "name": "subscriber_discount",
-                "value": "25",
-            },
-        ],
+                "value": "25"
+            }
+        ]
     }
 
-    response = _request(
-        "POST",
+    response = requests.post(
         f"{BASE_URL}/subscriptions",
-        json=payload,
+        headers=HEADERS,
+        json=payload
     )
+
+    response.raise_for_status()
 
     return response.json()
 # -------------------------------------------------
