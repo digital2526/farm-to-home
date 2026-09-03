@@ -111,7 +111,11 @@ def is_extra_variant(variant_id):
         timeout=15,
     )
 
-    response.raise_for_status()
+    if not response.ok:
+        raise RuntimeError(
+            f"Shopify token request failed: "
+            f"HTTP {response.status_code} - {response.text}"
+        )
 
     data = response.json()
 
