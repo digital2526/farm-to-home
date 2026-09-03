@@ -1,11 +1,29 @@
 from fastapi import HTTPException
+
 from shopify_admin import is_extra_variant
 
 from recharge import (
     get_customer_by_shopify_id,
-    get_delivery_schedule,
+    get_subscriptions,
+    get_charges,
     create_subscription,
 )
+
+
+def _is_extra_subscription(subscription):
+    properties = subscription.get(
+        "properties",
+        [],
+    )
+
+    for prop in properties:
+        if (
+            prop.get("name") == "subscription_type"
+            and str(prop.get("value", "")).lower() == "extra"
+        ):
+            return True
+
+    return False
 
 
 def create_extra_subscription(
@@ -13,22 +31,27 @@ def create_extra_subscription(
     variant_id,
     quantity=1,
 ):
+    # ---------------------------------------------------------
+    # 1. Validate quantity
+    # ---------------------------------------------------------
     if quantity < 1:
         raise HTTPException(
             status_code=400,
             detail="Quantity must be at least 1.",
         )
 
-    # Only Shopify products tagged "add-extra"
-    # can be added as extras.
+    # ---------------------------------------------------------
+    # 2. Validate that this Shopify variant is an Add Extra
+    # ---------------------------------------------------------
     if not is_extra_variant(variant_id):
         raise HTTPException(
             status_code=400,
             detail="This product is not available as an extra.",
         )
 
-    # Find the Recharge customer linked to the
-    # Shopify customer.
+    # ---------------------------------------------------------
+    # 3. Find Recharge customer
+    # ---------------------------------------------------------
     customer = get_customer_by_shopify_id(
         shopify_customer_id
     )
@@ -41,78 +64,132 @@ def create_extra_subscription(
 
     recharge_customer_id = customer["id"]
 
-    # Recharge Delivery Schedule is the source of truth
-    # for the customer's upcoming delivery.
-    schedule_response = get_delivery_schedule(
+    # ---------------------------------------------------------
+    # 4. Get customer's active subscriptions
+    # ---------------------------------------------------------
+    subscriptions_response = get_subscriptions(
         recharge_customer_id
     )
 
-    delivery_schedule = schedule_response.get(
-        "deliverySchedule",
-        {}
+    subscriptions = subscriptions_response.get(
+        "subscriptions",
+        [],
     )
 
-    deliveries = delivery_schedule.get(
-        "deliveries",
-        []
-    )
-
-    if not deliveries:
+    if not subscriptions:
         raise HTTPException(
             status_code=400,
-            detail="Customer has no upcoming delivery.",
+            detail="Customer has no subscription.",
         )
 
-    # Recharge returns deliveries in chronological order.
-    # Sort them defensively so we always use the first
-    # upcoming delivery.
-    deliveries = sorted(
-        deliveries,
-        key=lambda delivery: (
-            delivery.get("date") or ""
-        )
-    )
-
-    next_delivery = deliveries[0]
-
-    next_charge_date = next_delivery.get("date")
-
-    if not next_charge_date:
-        raise HTTPException(
-            status_code=400,
-            detail="Upcoming delivery has no date.",
-        )
-
-    orders = next_delivery.get(
-        "orders",
-        []
-    )
-
-    if not orders:
-        raise HTTPException(
-            status_code=400,
-            detail="Upcoming delivery has no order.",
-        )
-
-    # Find the address used by the upcoming delivery.
-    address_id = None
-
-    for order in orders:
-        if order.get("address_id"):
-            address_id = order["address_id"]
-            break
-
-    if not address_id:
-        raise HTTPException(
-            status_code=400,
-            detail="Upcoming delivery has no address.",
-        )
-
-    # Create the extra as a recurring weekly subscription.
+    # ---------------------------------------------------------
+    # 5. Keep only ACTIVE NON-EXTRA subscriptions
     #
-    # Recharge receives the actual upcoming delivery date
-    # from its own Delivery Schedule. We do not calculate
-    # the date ourselves.
+    # These are the customer's normal/menu subscriptions.
+    # ---------------------------------------------------------
+    base_subscriptions = []
+
+    for subscription in subscriptions:
+        status = str(
+            subscription.get("status", "")
+        ).lower()
+
+        if status != "active":
+            continue
+
+        if _is_extra_subscription(subscription):
+            continue
+
+        address_id = subscription.get(
+            "address_id"
+        )
+
+        if not address_id:
+            continue
+
+        base_subscriptions.append(
+            subscription
+        )
+
+    if not base_subscriptions:
+        raise HTTPException(
+            status_code=400,
+            detail="Customer has no active base subscription.",
+        )
+
+    # ---------------------------------------------------------
+    # 6. Find the queued Charge for each base subscription
+    #
+    # IMPORTANT:
+    # We do NOT choose the earliest subscription date.
+    #
+    # We ask Recharge which QUEUED charge actually exists
+    # for that subscription's address.
+    # ---------------------------------------------------------
+    candidate_charges = []
+
+    for subscription in base_subscriptions:
+        address_id = subscription.get(
+            "address_id"
+        )
+
+        charges_response = get_charges(
+            status="QUEUED",
+            limit=250,
+            customer_id=recharge_customer_id,
+            address_id=address_id,
+        )
+
+        charges = charges_response.get(
+            "charges",
+            [],
+        )
+
+        for charge in charges:
+            scheduled_at = charge.get(
+                "scheduled_at"
+            )
+
+            if not scheduled_at:
+                continue
+
+            candidate_charges.append(
+                {
+                    "charge": charge,
+                    "address_id": address_id,
+                    "scheduled_at": scheduled_at,
+                }
+            )
+
+    if not candidate_charges:
+        raise HTTPException(
+            status_code=400,
+            detail="Customer has no queued delivery charge.",
+        )
+
+    # ---------------------------------------------------------
+    # 7. Select the next queued Charge
+    #
+    # This is the actual Recharge charge that will contain
+    # the customer's upcoming menu.
+    # ---------------------------------------------------------
+    candidate_charges.sort(
+        key=lambda item: item["scheduled_at"]
+    )
+
+    next_charge = candidate_charges[0]
+
+    address_id = next_charge["address_id"]
+    next_charge_date = next_charge["scheduled_at"]
+
+    # ---------------------------------------------------------
+    # 8. Create recurring weekly extra
+    #
+    # The first charge date is taken directly from Recharge's
+    # existing queued Charge.
+    #
+    # Recharge then manages the recurring weekly schedule.
+    # ---------------------------------------------------------
     new_subscription = create_subscription(
         address_id=address_id,
         variant_id=variant_id,

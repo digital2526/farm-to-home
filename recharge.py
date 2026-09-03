@@ -119,7 +119,6 @@ def get_subscriptions(customer_id):
             "GET",
             f"{BASE_URL}/subscriptions",
             params=params,
-            retry=True,
         )
 
         data = response.json()
@@ -136,6 +135,7 @@ def get_subscriptions(customer_id):
     return {
         "subscriptions": subscriptions
     }
+
 
 
 # -------------------------------------------------
@@ -171,10 +171,15 @@ def create_subscription(
             "ecommerce": str(variant_id)
         },
         "quantity": int(quantity),
+
+        # Recurring every week
         "order_interval_unit": "week",
         "order_interval_frequency": 1,
         "charge_interval_frequency": 1,
+
+        # Recharge requires the first charge date.
         "next_charge_scheduled_at": next_charge_date,
+
         "properties": [
             {
                 "name": "subscription_type",
@@ -194,7 +199,6 @@ def create_subscription(
     )
 
     return response.json()
-
 # -------------------------------------------------
 # Delete subscription
 # -------------------------------------------------
@@ -409,10 +413,10 @@ def get_charges(
             "limit": limit,
         }
 
-        if customer_id:
+        if customer_id is not None:
             params["customer_id"] = customer_id
 
-        if address_id:
+        if address_id is not None:
             params["address_id"] = address_id
 
         if cursor:
@@ -422,7 +426,6 @@ def get_charges(
             "GET",
             f"{BASE_URL}/charges",
             params=params,
-            retry=True,
         )
 
         data = response.json()
