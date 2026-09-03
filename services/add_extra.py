@@ -70,7 +70,21 @@ def create_extra_subscription(
     subscriptions_response = get_subscriptions(
         recharge_customer_id
     )
+    
+    print("\n========== CUSTOMER SUBSCRIPTIONS ==========")
 
+    for s in subscriptions_response.get("subscriptions", []):
+        print({
+            "id": s.get("id"),
+            "product_title": s.get("product_title"),
+            "address_id": s.get("address_id"),
+            "next_charge_scheduled_at": s.get("next_charge_scheduled_at"),
+            "status": s.get("status"),
+            "properties": s.get("properties"),
+        })
+
+    print("============================================\n")
+    
     subscriptions = subscriptions_response.get(
         "subscriptions",
         [],
