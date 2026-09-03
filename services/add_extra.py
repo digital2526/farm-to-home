@@ -69,14 +69,8 @@ def create_extra_subscription(
     subscriptions = get_subscriptions(
         recharge_customer_id
     ).get("subscriptions", [])
-    
-    print("RECHARGE SUBSCRIPTIONS:", subscriptions)
 
-    if not subscriptions:
-        raise HTTPException(
-            status_code=400,
-            detail="Customer has no subscription.",
-        )
+    print("RECHARGE SUBSCRIPTIONS:", subscriptions)
 
     if not subscriptions:
         raise HTTPException(
@@ -91,7 +85,7 @@ def create_extra_subscription(
     if not address_id:
         raise HTTPException(
             status_code=400,
-            detail="Active subscription has no delivery address.",
+            detail="Subscription has no delivery address.",
         )
 
     address = next(
@@ -106,16 +100,24 @@ def create_extra_subscription(
     if not address:
         raise HTTPException(
             status_code=400,
-            detail="No delivery address found for the active subscription.",
+            detail="No delivery address found for the subscription.",
+        )
+
+    next_charge_date = subscription.get(
+        "next_charge_scheduled_at"
+    )
+
+    if not next_charge_date:
+        raise HTTPException(
+            status_code=400,
+            detail="Subscription has no scheduled charge date.",
         )
 
     new_subscription = create_subscription(
         address_id=address["id"],
         variant_id=variant_id,
         quantity=quantity,
-        next_charge_date=subscription[
-            "next_charge_scheduled_at"
-        ],
+        next_charge_date=next_charge_date,
     )
 
     return {
