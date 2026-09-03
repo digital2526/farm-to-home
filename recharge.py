@@ -280,45 +280,23 @@ def get_extra_subscriptions(customer_id):
 # Customer lookup
 # -------------------------------------------------
 
-def get_customer_by_shopify_id(
-    shopify_customer_id,
-):
+def get_customer_by_shopify_id(shopify_customer_id):
     response = _request(
         "GET",
         f"{BASE_URL}/customers",
         params={
-            "shopify_customer_id": shopify_customer_id,
+            "external_customer_id": str(shopify_customer_id),
+            "limit": 250,
         },
-        retry=True,
     )
 
-    customers = response.json().get(
-        "customers",
-        []
-    )
+    data = response.json()
+
+    customers = data.get("customers", [])
 
     if not customers:
-        raise HTTPException(
-            status_code=404,
-            detail="Recharge customer not found.",
-        )
+        return None
 
-    # Prefer a Recharge customer that has an ACTIVE
-    # subscription instead of blindly using customers[0].
-    for customer in customers:
-        subscriptions = get_subscriptions(
-            customer["id"]
-        ).get("subscriptions", [])
-
-        for subscription in subscriptions:
-            if (
-                subscription.get("status", "").upper()
-                == "ACTIVE"
-            ):
-                return customer
-
-    # Fall back to the first customer if none has
-    # an active subscription.
     return customers[0]
 
 
