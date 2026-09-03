@@ -453,3 +453,15 @@ def get_customer(customer_id):
     )
 
     return response.json()
+
+
+def get_delivery_schedule(customer_id):
+    response = _request(
+        "GET",
+        f"{BASE_URL}/customers/{customer_id}/delivery_schedule",
+        params={
+            "delivery_count_future": 1,
+        },
+    )
+
+    return response.json()
