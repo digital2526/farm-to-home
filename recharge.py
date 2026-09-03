@@ -167,11 +167,13 @@ def create_subscription(
 ):
     payload = {
         "address_id": int(address_id),
-        "shopify_variant_id": int(variant_id),
+        "external_variant_id": {
+            "ecommerce": str(variant_id)
+        },
         "quantity": int(quantity),
         "order_interval_unit": "week",
-        "order_interval_frequency": "1",
-        "charge_interval_frequency": "1",
+        "order_interval_frequency": 1,
+        "charge_interval_frequency": 1,
         "next_charge_scheduled_at": next_charge_date,
         "properties": [
             {
@@ -192,48 +194,6 @@ def create_subscription(
     )
 
     return response.json()
-
-
-# -------------------------------------------------
-# Add one-time product to existing subscription
-# -------------------------------------------------
-
-def create_onetime(
-    address_id,
-    variant_id,
-    quantity=1,
-    charge_date=None,
-):
-    """
-    Add a product as a one-time item to the customer's
-    next existing Recharge charge.
-
-    This does NOT create a recurring subscription.
-    """
-
-    payload = {
-        "address_id": int(address_id),
-        "external_variant_id": {
-            "ecommerce": str(variant_id)
-        },
-        "quantity": int(quantity),
-    }
-
-    # If we know the exact upcoming charge date,
-    # explicitly schedule the one-time item for that date.
-    if charge_date:
-        payload["next_charge_scheduled_at"] = charge_date
-    else:
-        payload["add_to_next_charge"] = True
-
-    response = _request(
-        "POST",
-        f"{BASE_URL}/onetimes",
-        json=payload,
-    )
-
-    return response.json()
-
 
 # -------------------------------------------------
 # Delete subscription
