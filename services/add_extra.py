@@ -7,8 +7,8 @@ from recharge import (
     get_subscriptions,
     get_charges,
     create_subscription,
+    set_subscription_next_charge_date,
 )
-
 
 def _is_extra_subscription(subscription):
     properties = subscription.get(
@@ -131,7 +131,7 @@ def create_extra_subscription(
             detail="Customer has no active base subscription.",
         )
 
-        # ---------------------------------------------------------
+    # ---------------------------------------------------------
     # 6. Use the address of the customer's active base menu
     # ---------------------------------------------------------
     address_id = base_subscriptions[0]["address_id"]
@@ -191,12 +191,25 @@ def create_extra_subscription(
         quantity=quantity,
         next_charge_date=next_charge_date,
     )
+    
+    created_subscription = new_subscription.get(
+        "subscription"
+    )
+
+    if not created_subscription:
+        raise HTTPException(
+            status_code=500,
+            detail="Recharge did not return the created subscription.",
+        )
+
+    set_subscription_next_charge_date(
+        subscription_id=created_subscription["id"],
+        date=next_charge_date,
+    )
 
     return {
         "success": True,
         "delivery_date": next_charge_date,
         "address_id": address_id,
-        "subscription": new_subscription.get(
-            "subscription"
-        ),
+        "subscription": created_subscription,
     }

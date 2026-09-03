@@ -276,6 +276,20 @@ def get_extra_subscriptions(customer_id):
 
     return extras
 
+def set_subscription_next_charge_date(
+    subscription_id,
+    date,
+):
+    response = _request(
+        "POST",
+        f"{BASE_URL}/subscriptions/{subscription_id}/set_next_charge_date",
+        json={
+            "date": date,
+        },
+    )
+
+    return response.json()
+
 # -------------------------------------------------
 # Customer lookup
 # -------------------------------------------------
