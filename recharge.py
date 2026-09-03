@@ -204,16 +204,11 @@ def create_onetime(
     quantity=1,
     next_charge_scheduled_at=None,
 ):
-    """
-    Add a product as a one-time item to the customer's
-    existing subscription/address.
-
-    This does NOT create a new recurring subscription.
-    """
-
     payload = {
         "address_id": int(address_id),
-        "shopify_variant_id": int(variant_id),
+        "external_variant_id": {
+            "ecommerce": str(variant_id)
+        },
         "quantity": int(quantity),
     }
 

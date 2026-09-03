@@ -64,10 +64,7 @@ def create_extra_subscription(
             detail="Customer has no subscription.",
         )
 
-    # IMPORTANT:
     # Use an ACTIVE subscription.
-    # Do not use subscriptions[0] because the first
-    # subscription may be cancelled.
     active_subscriptions = [
         subscription
         for subscription in subscriptions
@@ -117,7 +114,6 @@ def create_extra_subscription(
             detail="Subscription has no scheduled charge date.",
         )
 
-    # IMPORTANT:
     # Add the product as a ONE-TIME item.
     # This does NOT create a new recurring subscription.
     onetime = create_onetime(
