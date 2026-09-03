@@ -46,7 +46,9 @@ def _request(method, url, *, retry=False, **kwargs):
 
         except requests.exceptions.ConnectTimeout as exc:
             if attempt < attempts - 1:
-                time.sleep(RETRY_BACKOFF_SECONDS * (attempt + 1))
+                time.sleep(
+                    RETRY_BACKOFF_SECONDS * (attempt + 1)
+                )
                 continue
 
             raise HTTPException(
@@ -56,7 +58,9 @@ def _request(method, url, *, retry=False, **kwargs):
 
         except requests.exceptions.ReadTimeout as exc:
             if attempt < attempts - 1:
-                time.sleep(RETRY_BACKOFF_SECONDS * (attempt + 1))
+                time.sleep(
+                    RETRY_BACKOFF_SECONDS * (attempt + 1)
+                )
                 continue
 
             raise HTTPException(
@@ -66,7 +70,9 @@ def _request(method, url, *, retry=False, **kwargs):
 
         except requests.exceptions.ConnectionError as exc:
             if attempt < attempts - 1:
-                time.sleep(RETRY_BACKOFF_SECONDS * (attempt + 1))
+                time.sleep(
+                    RETRY_BACKOFF_SECONDS * (attempt + 1)
+                )
                 continue
 
             raise HTTPException(
@@ -79,7 +85,10 @@ def _request(method, url, *, retry=False, **kwargs):
 
             raise HTTPException(
                 status_code=status_code,
-                detail=f"Recharge API request failed with status {status_code}.",
+                detail=(
+                    "Recharge API request failed "
+                    f"with status {status_code}."
+                ),
             ) from exc
 
         except requests.exceptions.RequestException as exc:
@@ -88,6 +97,10 @@ def _request(method, url, *, retry=False, **kwargs):
                 detail="Recharge API request failed.",
             ) from exc
 
+
+# -------------------------------------------------
+# Subscriptions
+# -------------------------------------------------
 
 def get_subscriptions(customer_id):
     subscriptions = []
@@ -125,8 +138,11 @@ def get_subscriptions(customer_id):
     }
 
 
-def get_addresses(customer_id):
+# -------------------------------------------------
+# Addresses
+# -------------------------------------------------
 
+def get_addresses(customer_id):
     response = _request(
         "GET",
         f"{BASE_URL}/addresses",
@@ -139,13 +155,16 @@ def get_addresses(customer_id):
     return response.json()
 
 
+# -------------------------------------------------
+# Create subscription
+# -------------------------------------------------
+
 def create_subscription(
     address_id,
     variant_id,
     quantity,
     next_charge_date,
 ):
-
     payload = {
         "address_id": address_id,
         "shopify_variant_id": int(variant_id),
@@ -175,8 +194,11 @@ def create_subscription(
     return response.json()
 
 
-def delete_subscription(subscription_id):
+# -------------------------------------------------
+# Delete subscription
+# -------------------------------------------------
 
+def delete_subscription(subscription_id):
     _request(
         "DELETE",
         f"{BASE_URL}/subscriptions/{subscription_id}",
@@ -187,8 +209,11 @@ def delete_subscription(subscription_id):
     }
 
 
-def get_extra_subscriptions(customer_id):
+# -------------------------------------------------
+# Extra subscriptions
+# -------------------------------------------------
 
+def get_extra_subscriptions(customer_id):
     subscriptions = get_subscriptions(
         customer_id
     )["subscriptions"]
@@ -196,7 +221,6 @@ def get_extra_subscriptions(customer_id):
     extras = []
 
     for subscription in subscriptions:
-
         properties = subscription.get(
             "properties",
             [],
@@ -205,26 +229,26 @@ def get_extra_subscriptions(customer_id):
         is_extra = False
 
         for prop in properties:
-
             if (
-                prop["name"] == "subscription_type"
-                and prop["value"] == "extra"
+                prop.get("name") == "subscription_type"
+                and prop.get("value") == "extra"
             ):
                 is_extra = True
                 break
 
         if is_extra:
-
             extras.append(
                 {
                     "subscription_id": subscription["id"],
-                    "variant_id": subscription[
+                    "variant_id": subscription.get(
                         "shopify_variant_id"
-                    ],
-                    "title": subscription[
+                    ),
+                    "title": subscription.get(
                         "product_title"
-                    ],
-                    "price": subscription["price"],
+                    ),
+                    "price": subscription.get(
+                        "price"
+                    ),
                     "quantity": subscription.get(
                         "quantity",
                         1,
@@ -235,10 +259,13 @@ def get_extra_subscriptions(customer_id):
     return extras
 
 
+# -------------------------------------------------
+# Customer lookup
+# -------------------------------------------------
+
 def get_customer_by_shopify_id(
     shopify_customer_id,
 ):
-
     response = _request(
         "GET",
         f"{BASE_URL}/customers",
@@ -248,10 +275,12 @@ def get_customer_by_shopify_id(
         retry=True,
     )
 
-    customers = response.json()["customers"]
+    customers = response.json().get(
+        "customers",
+        []
+    )
 
     if not customers:
-
         raise HTTPException(
             status_code=404,
             detail="Recharge customer not found.",
@@ -259,6 +288,10 @@ def get_customer_by_shopify_id(
 
     return customers[0]
 
+
+# -------------------------------------------------
+# Validate extra subscription
+# -------------------------------------------------
 
 def get_valid_extra_subscription(
     recharge_customer_id,
@@ -269,13 +302,16 @@ def get_valid_extra_subscription(
     )["subscriptions"]
 
     for subscription in subscriptions:
-        if subscription["id"] != int(subscription_id):
+        if subscription.get("id") != int(subscription_id):
             continue
 
         is_extra = any(
-            prop["name"] == "subscription_type"
-            and prop["value"] == "extra"
-            for prop in subscription.get("properties", [])
+            prop.get("name") == "subscription_type"
+            and prop.get("value") == "extra"
+            for prop in subscription.get(
+                "properties",
+                [],
+            )
         )
 
         if is_extra:
@@ -286,13 +322,14 @@ def get_valid_extra_subscription(
     return None
 
 
-
+# -------------------------------------------------
+# Update subscription quantity
+# -------------------------------------------------
 
 def update_subscription_quantity(
     subscription_id,
     quantity,
 ):
-
     payload = {
         "quantity": int(quantity),
     }
@@ -306,23 +343,25 @@ def update_subscription_quantity(
     return response.json()
 
 
+# -------------------------------------------------
+# Find existing extra by variant
+# -------------------------------------------------
+
 def get_extra_subscription_by_variant(
     customer_id,
     variant_id,
 ):
-
     subscriptions = get_subscriptions(
         customer_id
     )["subscriptions"]
 
     for subscription in subscriptions:
-
         if (
             subscription.get("shopify_variant_id")
             == int(variant_id)
             and any(
-                p["name"] == "subscription_type"
-                and p["value"] == "extra"
+                p.get("name") == "subscription_type"
+                and p.get("value") == "extra"
                 for p in subscription.get(
                     "properties",
                     [],
@@ -333,6 +372,10 @@ def get_extra_subscription_by_variant(
 
     return None
 
+
+# -------------------------------------------------
+# Charges
+# -------------------------------------------------
 
 def get_charges(
     status="SUCCESS",
@@ -373,23 +416,14 @@ def get_charges(
     }
 
 
-def get_customer(customer_id):
+# -------------------------------------------------
+# Get customer
+# -------------------------------------------------
 
+def get_customer(customer_id):
     response = _request(
         "GET",
         f"{BASE_URL}/customers/{customer_id}",
-        retry=True,
-    )
-
-    return response.json()
-
-def get_delivery_schedule(customer_id):
-    response = _request(
-        "GET",
-        f"{BASE_URL}/customers/{customer_id}/delivery_schedule",
-        params={
-            "delivery_count_future": 1,
-        },
         retry=True,
     )
 
