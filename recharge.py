@@ -231,38 +231,50 @@ def get_extra_subscriptions(customer_id):
             [],
         )
 
-        is_extra = False
+        is_extra = any(
+            str(prop.get("name", "")).lower() == "subscription_type"
+            and str(prop.get("value", "")).lower() == "extra"
+            for prop in properties
+        )
 
-        for prop in properties:
-            if (
-                prop.get("name") == "subscription_type"
-                and prop.get("value") == "extra"
-            ):
-                is_extra = True
-                break
+        if not is_extra:
+            continue
 
-        if is_extra:
-            extras.append(
-                {
-                    "subscription_id": subscription["id"],
-                    "variant_id": subscription.get(
-                        "shopify_variant_id"
-                    ),
-                    "title": subscription.get(
-                        "product_title"
-                    ),
-                    "price": subscription.get(
-                        "price"
-                    ),
-                    "quantity": subscription.get(
-                        "quantity",
-                        1,
-                    ),
-                }
+        variant_id = subscription.get("shopify_variant_id")
+
+        if not variant_id:
+            external_variant_id = subscription.get(
+                "external_variant_id",
+                {}
             )
 
-    return extras
+            variant_id = external_variant_id.get(
+                "ecommerce"
+            )
 
+        if not variant_id:
+            continue
+
+        extras.append(
+            {
+                "subscription_id": subscription["id"],
+                "variant_id": int(variant_id),
+                "title": subscription.get(
+                    "product_title",
+                    ""
+                ),
+                "price": subscription.get(
+                    "price",
+                    0
+                ),
+                "quantity": subscription.get(
+                    "quantity",
+                    1
+                ),
+            }
+        )
+
+    return extras
 
 # -------------------------------------------------
 # Customer lookup
