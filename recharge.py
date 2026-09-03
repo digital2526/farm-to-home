@@ -204,10 +204,10 @@ def create_onetime(
     quantity=1,
 ):
     """
-    Add a product as a one-time item to the customer's
-    next existing Recharge charge.
+    Add a product as a one-time item to the next
+    queued Recharge charge for the address.
 
-    This does NOT create a new recurring subscription.
+    This does NOT create a recurring subscription.
     """
 
     payload = {
@@ -430,6 +430,8 @@ def get_extra_subscription_by_variant(
 def get_charges(
     status="SUCCESS",
     limit=250,
+    customer_id=None,
+    address_id=None,
 ):
     charges = []
     cursor = None
@@ -439,6 +441,12 @@ def get_charges(
             "status": status,
             "limit": limit,
         }
+
+        if customer_id:
+            params["customer_id"] = customer_id
+
+        if address_id:
+            params["address_id"] = address_id
 
         if cursor:
             params["cursor"] = cursor

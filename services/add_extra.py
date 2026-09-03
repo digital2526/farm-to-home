@@ -6,6 +6,7 @@ from recharge import (
     get_addresses,
     get_subscriptions,
     create_onetime,
+    get_charges,
 )
 
 
@@ -103,10 +104,22 @@ def create_extra_subscription(
             detail="No delivery address found for the subscription.",
         )
 
+    # Make sure this address has an upcoming queued charge.
+    queued_charges = get_charges(
+        status="QUEUED",
+        address_id=address_id,
+    ).get("charges", [])
+
+    if not queued_charges:
+        raise HTTPException(
+            status_code=400,
+            detail="No upcoming queued charge found for this delivery address.",
+        )
+
     # Add the product as a ONE-TIME item.
     # This does NOT create a new recurring subscription.
     onetime = create_onetime(
-        address_id=address["id"],
+        address_id=address_id,
         variant_id=variant_id,
         quantity=quantity,
     )
