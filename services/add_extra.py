@@ -76,32 +76,21 @@ def create_extra_subscription(
             detail="Customer has no subscription.",
         )
 
-    active_subscriptions = [
+    usable_subscriptions = [
         subscription
         for subscription in subscriptions
-        if subscription.get("status", "").upper() == "ACTIVE"
+        if subscription.get("address_id")
+        and subscription.get("next_charge_scheduled_at")
     ]
 
-    if not active_subscriptions:
+    if not usable_subscriptions:
         raise HTTPException(
             status_code=400,
-            detail="Customer has no active subscription.",
-        )
-
-    scheduled_subscriptions = [
-        subscription
-        for subscription in active_subscriptions
-        if subscription.get("next_charge_scheduled_at")
-    ]
-
-    if not scheduled_subscriptions:
-        raise HTTPException(
-            status_code=400,
-            detail="Customer's active subscription has no scheduled charge.",
+            detail="No subscription with a delivery address and scheduled charge found.",
         )
 
     subscription = min(
-        scheduled_subscriptions,
+        usable_subscriptions,
         key=lambda item: item["next_charge_scheduled_at"],
     )
 
