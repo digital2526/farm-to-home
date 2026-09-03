@@ -5,6 +5,7 @@ from recharge import (
     get_customer_by_shopify_id,
     get_addresses,
     get_subscriptions,
+    get_charges,
     create_subscription,
 )
 
@@ -64,7 +65,8 @@ def create_extra_subscription(
             detail="Customer has no subscription.",
         )
 
-    # Use an ACTIVE subscription.
+    # Use an ACTIVE subscription to get the customer's
+    # delivery address.
     active_subscriptions = [
         subscription
         for subscription in subscriptions
@@ -77,10 +79,9 @@ def create_extra_subscription(
             detail="Customer has no active subscription.",
         )
 
-    # Use the customer's existing active subscription
-    # as the schedule/address reference.
     subscription = active_subscriptions[0]
 
+    # Get the delivery address from the active subscription.
     address_id = subscription.get("address_id")
 
     if not address_id:
@@ -89,7 +90,7 @@ def create_extra_subscription(
             detail="Subscription has no delivery address.",
         )
 
-    # Verify that the subscription address exists.
+    # Verify that the address exists.
     address = next(
         (
             address
@@ -105,20 +106,36 @@ def create_extra_subscription(
             detail="No delivery address found for the subscription.",
         )
 
-    # Use the same next charge date as the existing subscription.
-    next_charge_date = subscription.get(
-        "next_charge_scheduled_at"
+    # Find the customer's actual upcoming queued charge.
+    queued_charges = get_charges(
+        status="QUEUED",
+        address_id=address_id,
+    ).get("charges", [])
+
+    if not queued_charges:
+        raise HTTPException(
+            status_code=400,
+            detail="No upcoming queued charge found for this delivery address.",
+        )
+
+    # Select the earliest upcoming queued charge.
+    queued_charges.sort(
+        key=lambda charge: charge.get("scheduled_at", "")
     )
+
+    next_charge = queued_charges[0]
+
+    next_charge_date = next_charge.get("scheduled_at")
 
     if not next_charge_date:
         raise HTTPException(
             status_code=400,
-            detail="Subscription has no scheduled charge date.",
+            detail="Upcoming queued charge has no scheduled date.",
         )
 
-    # Create the extra as a RECURRING weekly subscription.
-    # It uses the same customer/address and starts on
-    # the same next charge date.
+    # Create the extra as a recurring weekly subscription.
+    # It starts with the customer's next upcoming charge
+    # and continues every week.
     new_subscription = create_subscription(
         address_id=address_id,
         variant_id=variant_id,
