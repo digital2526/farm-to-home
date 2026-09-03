@@ -69,6 +69,8 @@ def create_extra_subscription(
     subscriptions = get_subscriptions(
         recharge_customer_id
     ).get("subscriptions", [])
+    
+    print("RECHARGE SUBSCRIPTIONS:", subscriptions)
 
     if not subscriptions:
         raise HTTPException(
@@ -76,23 +78,13 @@ def create_extra_subscription(
             detail="Customer has no subscription.",
         )
 
-    usable_subscriptions = [
-        subscription
-        for subscription in subscriptions
-        if subscription.get("address_id")
-        and subscription.get("next_charge_scheduled_at")
-    ]
-
-    if not usable_subscriptions:
+    if not subscriptions:
         raise HTTPException(
             status_code=400,
-            detail="No subscription with a delivery address and scheduled charge found.",
+            detail="Customer has no subscription.",
         )
 
-    subscription = min(
-        usable_subscriptions,
-        key=lambda item: item["next_charge_scheduled_at"],
-    )
+    subscription = subscriptions[0]
 
     address_id = subscription.get("address_id")
 
