@@ -116,12 +116,28 @@ def create_extra_subscription(
             detail="No upcoming queued charge found for this delivery address.",
         )
 
-    # Add the product as a ONE-TIME item.
-    # This does NOT create a new recurring subscription.
+    # Use the earliest upcoming queued charge.
+    queued_charges.sort(
+        key=lambda charge: charge.get("scheduled_at", "")
+    )
+
+    next_charge = queued_charges[0]
+
+    next_charge_date = next_charge.get("scheduled_at")
+
+    if not next_charge_date:
+        raise HTTPException(
+            status_code=400,
+            detail="Upcoming queued charge has no scheduled date.",
+        )
+
+    # Add the extra as a one-time item for the exact
+    # same date as the customer's upcoming charge.
     onetime = create_onetime(
         address_id=address_id,
         variant_id=variant_id,
         quantity=quantity,
+        charge_date=next_charge_date,
     )
 
     return {
