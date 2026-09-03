@@ -5,9 +5,7 @@ from recharge import (
     get_customer_by_shopify_id,
     get_addresses,
     get_subscriptions,
-    create_subscription,
-    get_extra_subscription_by_variant,
-    update_subscription_quantity,
+    create_onetime,
 )
 
 
@@ -22,12 +20,16 @@ def create_extra_subscription(
             detail="Quantity must be at least 1.",
         )
 
+    # Only products tagged "add-extra" in Shopify
+    # are allowed to be added.
     if not is_extra_variant(variant_id):
         raise HTTPException(
             status_code=400,
             detail="This product is not available as an extra.",
         )
 
+    # Find the Recharge customer belonging to the
+    # Shopify customer.
     customer = get_customer_by_shopify_id(
         shopify_customer_id
     )
@@ -40,22 +42,7 @@ def create_extra_subscription(
 
     recharge_customer_id = customer["id"]
 
-    existing = get_extra_subscription_by_variant(
-        recharge_customer_id,
-        variant_id,
-    )
-
-    if existing:
-        updated = update_subscription_quantity(
-            existing["id"],
-            quantity,
-        )
-
-        return {
-            "success": True,
-            "subscription": updated["subscription"],
-        }
-
+    # Get the customer's delivery addresses.
     addresses = get_addresses(
         recharge_customer_id
     ).get("addresses", [])
@@ -66,11 +53,10 @@ def create_extra_subscription(
             detail="Customer has no delivery address.",
         )
 
+    # Get all subscriptions for the customer.
     subscriptions = get_subscriptions(
         recharge_customer_id
     ).get("subscriptions", [])
-
-    print("RECHARGE SUBSCRIPTIONS:", subscriptions)
 
     if not subscriptions:
         raise HTTPException(
@@ -78,8 +64,25 @@ def create_extra_subscription(
             detail="Customer has no subscription.",
         )
 
-    subscription = subscriptions[0]
+    # IMPORTANT:
+    # Use an ACTIVE subscription.
+    # Do not use subscriptions[0] because the first
+    # subscription may be cancelled.
+    active_subscriptions = [
+        subscription
+        for subscription in subscriptions
+        if subscription.get("status", "").upper() == "ACTIVE"
+    ]
 
+    if not active_subscriptions:
+        raise HTTPException(
+            status_code=400,
+            detail="Customer has no active subscription.",
+        )
+
+    subscription = active_subscriptions[0]
+
+    # Get the delivery address from the active subscription.
     address_id = subscription.get("address_id")
 
     if not address_id:
@@ -103,6 +106,7 @@ def create_extra_subscription(
             detail="No delivery address found for the subscription.",
         )
 
+    # Get the next scheduled charge date.
     next_charge_date = subscription.get(
         "next_charge_scheduled_at"
     )
@@ -113,14 +117,17 @@ def create_extra_subscription(
             detail="Subscription has no scheduled charge date.",
         )
 
-    new_subscription = create_subscription(
+    # IMPORTANT:
+    # Add the product as a ONE-TIME item.
+    # This does NOT create a new recurring subscription.
+    onetime = create_onetime(
         address_id=address["id"],
         variant_id=variant_id,
         quantity=quantity,
-        next_charge_date=next_charge_date,
+        next_charge_scheduled_at=next_charge_date,
     )
 
     return {
         "success": True,
-        "subscription": new_subscription["subscription"],
+        "onetime": onetime.get("onetime"),
     }

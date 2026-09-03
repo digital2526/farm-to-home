@@ -166,7 +166,7 @@ def create_subscription(
     next_charge_date,
 ):
     payload = {
-        "address_id": address_id,
+        "address_id": int(address_id),
         "shopify_variant_id": int(variant_id),
         "quantity": int(quantity),
         "order_interval_unit": "week",
@@ -188,6 +188,43 @@ def create_subscription(
     response = _request(
         "POST",
         f"{BASE_URL}/subscriptions",
+        json=payload,
+    )
+
+    return response.json()
+
+
+# -------------------------------------------------
+# Add one-time product to existing subscription
+# -------------------------------------------------
+
+def create_onetime(
+    address_id,
+    variant_id,
+    quantity=1,
+    next_charge_scheduled_at=None,
+):
+    """
+    Add a product as a one-time item to the customer's
+    existing subscription/address.
+
+    This does NOT create a new recurring subscription.
+    """
+
+    payload = {
+        "address_id": int(address_id),
+        "shopify_variant_id": int(variant_id),
+        "quantity": int(quantity),
+    }
+
+    if next_charge_scheduled_at:
+        payload["next_charge_scheduled_at"] = (
+            next_charge_scheduled_at
+        )
+
+    response = _request(
+        "POST",
+        f"{BASE_URL}/onetimes",
         json=payload,
     )
 
@@ -286,15 +323,22 @@ def get_customer_by_shopify_id(
             detail="Recharge customer not found.",
         )
 
+    # Prefer a Recharge customer that has an ACTIVE
+    # subscription instead of blindly using customers[0].
     for customer in customers:
         subscriptions = get_subscriptions(
             customer["id"]
         ).get("subscriptions", [])
 
         for subscription in subscriptions:
-            if subscription.get("status", "").upper() == "ACTIVE":
+            if (
+                subscription.get("status", "").upper()
+                == "ACTIVE"
+            ):
                 return customer
 
+    # Fall back to the first customer if none has
+    # an active subscription.
     return customers[0]
 
 
