@@ -131,69 +131,50 @@ def create_extra_subscription(
             detail="Customer has no active base subscription.",
         )
 
+        # ---------------------------------------------------------
+    # 6. Use the address of the customer's active base menu
     # ---------------------------------------------------------
-    # 6. Find the queued Charge for each base subscription
-    #
-    # IMPORTANT:
-    # We do NOT choose the earliest subscription date.
-    #
-    # We ask Recharge which QUEUED charge actually exists
-    # for that subscription's address.
-    # ---------------------------------------------------------
-    candidate_charges = []
+    address_id = base_subscriptions[0]["address_id"]
 
-    for subscription in base_subscriptions:
-        address_id = subscription.get(
-            "address_id"
-        )
+    charges_response = get_charges(
+        status="QUEUED",
+        limit=250,
+        customer_id=recharge_customer_id,
+        address_id=address_id,
+    )
 
-        charges_response = get_charges(
-            status="QUEUED",
-            limit=250,
-            customer_id=recharge_customer_id,
-            address_id=address_id,
-        )
+    charges = charges_response.get(
+        "charges",
+        [],
+    )
 
-        charges = charges_response.get(
-            "charges",
-            [],
-        )
-
-        for charge in charges:
-            scheduled_at = charge.get(
-                "scheduled_at"
-            )
-
-            if not scheduled_at:
-                continue
-
-            candidate_charges.append(
-                {
-                    "charge": charge,
-                    "address_id": address_id,
-                    "scheduled_at": scheduled_at,
-                }
-            )
-
-    if not candidate_charges:
+    if not charges:
         raise HTTPException(
             status_code=400,
             detail="Customer has no queued delivery charge.",
         )
 
     # ---------------------------------------------------------
-    # 7. Select the next queued Charge
-    #
-    # This is the actual Recharge charge that will contain
-    # the customer's upcoming menu.
+    # 7. Find the next queued delivery charge for this address
     # ---------------------------------------------------------
-    candidate_charges.sort(
-        key=lambda item: item["scheduled_at"]
+    valid_charges = [
+        charge
+        for charge in charges
+        if charge.get("scheduled_at")
+    ]
+
+    if not valid_charges:
+        raise HTTPException(
+            status_code=400,
+            detail="Customer has no queued delivery charge.",
+        )
+
+    valid_charges.sort(
+        key=lambda charge: charge["scheduled_at"]
     )
 
-    next_charge = candidate_charges[0]
+    next_charge = valid_charges[0]
 
-    address_id = next_charge["address_id"]
     next_charge_date = next_charge["scheduled_at"]
 
     # ---------------------------------------------------------
