@@ -131,38 +131,59 @@ def create_extra_subscription(
             detail="Customer has no active base subscription.",
         )
 
+        # ---------------------------------------------------------
+    # 6. Find the customer's main meal-plan address
     # ---------------------------------------------------------
-    # 6. Find the customer's next queued delivery
-    # ---------------------------------------------------------
-    candidate_addresses = {
-        sub["address_id"]
-        for sub in base_subscriptions
-        if sub.get("address_id")
-    }
+    main_subscription = None
 
-    if not candidate_addresses:
+    for subscription in base_subscriptions:
+        properties = subscription.get("properties", [])
+
+        for prop in properties:
+            if (
+                prop.get("name") == "_plan_parent"
+                and str(prop.get("value", "")).lower() == "true"
+            ):
+                main_subscription = subscription
+                break
+
+        if main_subscription:
+            break
+
+    if not main_subscription:
         raise HTTPException(
             status_code=400,
-            detail="Customer has no valid subscription address.",
+            detail="Customer has no active main meal-plan subscription.",
         )
 
-    all_queued_charges = get_charges(
+    address_id = main_subscription.get("address_id")
+
+    if not address_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Main meal-plan subscription has no address.",
+        )
+
+    # ---------------------------------------------------------
+    # 7. Find the next queued charge for the main meal-plan address
+    # ---------------------------------------------------------
+    charges_response = get_charges(
         status="QUEUED",
         limit=250,
         customer_id=recharge_customer_id,
+        address_id=address_id,
     )
 
     charges = [
         charge
-        for charge in all_queued_charges.get("charges", [])
-        if charge.get("address_id") in candidate_addresses
-        and charge.get("scheduled_at")
+        for charge in charges_response.get("charges", [])
+        if charge.get("scheduled_at")
     ]
 
     if not charges:
         raise HTTPException(
             status_code=400,
-            detail="Customer has no queued delivery charge.",
+            detail="Customer has no queued delivery charge for the main meal plan.",
         )
 
     charges.sort(
@@ -171,11 +192,10 @@ def create_extra_subscription(
 
     next_charge = charges[0]
 
-    address_id = next_charge["address_id"]
     next_charge_date = next_charge["scheduled_at"]
 
     # ---------------------------------------------------------
-    # 7. Create recurring weekly extra
+    # 8. Create recurring weekly extra
     # ---------------------------------------------------------
     new_subscription = create_subscription(
         address_id=address_id,
@@ -195,7 +215,6 @@ def create_extra_subscription(
         )
 
     # Ensure the extra uses the same next-charge date
-    # so Recharge can merge it into the customer's existing charge.
     set_subscription_next_charge_date(
         subscription_id=created_subscription["id"],
         date=next_charge_date,
