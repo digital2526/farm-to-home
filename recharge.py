@@ -286,6 +286,15 @@ def get_customer_by_shopify_id(
             detail="Recharge customer not found.",
         )
 
+    for customer in customers:
+        subscriptions = get_subscriptions(
+            customer["id"]
+        ).get("subscriptions", [])
+
+        for subscription in subscriptions:
+            if subscription.get("status", "").upper() == "ACTIVE":
+                return customer
+
     return customers[0]
 
 
