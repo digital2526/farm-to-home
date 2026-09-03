@@ -1,5 +1,5 @@
 from fastapi import HTTPException
-from config import EXTRA_VARIANT_IDS
+from shopify_admin import is_extra_variant
 
 from recharge import (
     get_customer_by_shopify_id,
@@ -22,7 +22,7 @@ def create_extra_subscription(
             detail="Quantity must be at least 1."
         )
 
-    if int(variant_id) not in EXTRA_VARIANT_IDS:
+    if not is_extra_variant(variant_id):
         raise HTTPException(
             status_code=400,
             detail="This product is not available as an extra."
