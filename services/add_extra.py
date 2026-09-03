@@ -132,21 +132,32 @@ def create_extra_subscription(
         )
 
     # ---------------------------------------------------------
-    # 6. Use the address of the customer's active base menu
+    # 6. Find the customer's next queued delivery
     # ---------------------------------------------------------
-    address_id = base_subscriptions[0]["address_id"]
+    candidate_addresses = {
+        sub["address_id"]
+        for sub in base_subscriptions
+        if sub.get("address_id")
+    }
 
-    charges_response = get_charges(
+    if not candidate_addresses:
+        raise HTTPException(
+            status_code=400,
+            detail="Customer has no valid subscription address.",
+        )
+
+    all_queued_charges = get_charges(
         status="QUEUED",
         limit=250,
         customer_id=recharge_customer_id,
-        address_id=address_id,
     )
 
-    charges = charges_response.get(
-        "charges",
-        [],
-    )
+    charges = [
+        charge
+        for charge in all_queued_charges.get("charges", [])
+        if charge.get("address_id") in candidate_addresses
+        and charge.get("scheduled_at")
+    ]
 
     if not charges:
         raise HTTPException(
@@ -154,36 +165,17 @@ def create_extra_subscription(
             detail="Customer has no queued delivery charge.",
         )
 
-    # ---------------------------------------------------------
-    # 7. Find the next queued delivery charge for this address
-    # ---------------------------------------------------------
-    valid_charges = [
-        charge
-        for charge in charges
-        if charge.get("scheduled_at")
-    ]
-
-    if not valid_charges:
-        raise HTTPException(
-            status_code=400,
-            detail="Customer has no queued delivery charge.",
-        )
-
-    valid_charges.sort(
+    charges.sort(
         key=lambda charge: charge["scheduled_at"]
     )
 
-    next_charge = valid_charges[0]
+    next_charge = charges[0]
 
+    address_id = next_charge["address_id"]
     next_charge_date = next_charge["scheduled_at"]
 
     # ---------------------------------------------------------
-    # 8. Create recurring weekly extra
-    #
-    # The first charge date is taken directly from Recharge's
-    # existing queued Charge.
-    #
-    # Recharge then manages the recurring weekly schedule.
+    # 7. Create recurring weekly extra
     # ---------------------------------------------------------
     new_subscription = create_subscription(
         address_id=address_id,
@@ -191,7 +183,7 @@ def create_extra_subscription(
         quantity=quantity,
         next_charge_date=next_charge_date,
     )
-    
+
     created_subscription = new_subscription.get(
         "subscription"
     )
@@ -202,6 +194,8 @@ def create_extra_subscription(
             detail="Recharge did not return the created subscription.",
         )
 
+    # Ensure the extra uses the same next-charge date
+    # so Recharge can merge it into the customer's existing charge.
     set_subscription_next_charge_date(
         subscription_id=created_subscription["id"],
         date=next_charge_date,
