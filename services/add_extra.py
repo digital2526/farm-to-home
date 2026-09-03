@@ -5,6 +5,7 @@ from recharge import (
     get_customer_by_shopify_id,
     get_addresses,
     get_subscriptions,
+    get_delivery_schedule,
     create_subscription,
     get_extra_subscription_by_variant,
     update_subscription_quantity,
@@ -66,34 +67,36 @@ def create_extra_subscription(
             detail="Customer has no delivery address.",
         )
 
-    subscriptions = get_subscriptions(
-        recharge_customer_id
-    ).get("subscriptions", [])
+    delivery_schedule = get_delivery_schedule(
+    recharge_customer_id
+)
 
-    if not subscriptions:
-        raise HTTPException(
-            status_code=400,
-            detail="Customer has no subscription.",
-        )
-
-    scheduled_subscriptions = [
-        subscription
-        for subscription in subscriptions
-        if subscription.get("next_charge_scheduled_at")
-    ]
-
-    if not scheduled_subscriptions:
-        raise HTTPException(
-            status_code=400,
-            detail="Customer has no subscription with a scheduled delivery.",
-        )
-
-    subscription = min(
-        scheduled_subscriptions,
-        key=lambda item: item["next_charge_scheduled_at"],
+    deliveries = delivery_schedule.get(
+        "delivery_schedule",
+        []
     )
 
-    address_id = subscription.get("address_id")
+    if not deliveries:
+        raise HTTPException(
+            status_code=400,
+            detail="Customer has no upcoming delivery."
+        )
+
+    delivery = deliveries[0]
+
+    next_charge_date = delivery.get("scheduled_at")
+
+    if not next_charge_date:
+        next_charge_date = delivery.get("charge_date")
+
+    if not next_charge_date:
+        raise HTTPException(
+            status_code=400,
+            detail="Customer's upcoming delivery has no scheduled date."
+        )
+
+    address_id = delivery.get("address_id")
+    
 
     address = next(
         (
@@ -114,7 +117,7 @@ def create_extra_subscription(
         address_id=address["id"],
         variant_id=variant_id,
         quantity=quantity,
-        next_charge_date=subscription["next_charge_scheduled_at"],
+        next_charge_date=next_charge_date,
     )
 
     return {
