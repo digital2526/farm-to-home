@@ -103,24 +103,12 @@ def create_extra_subscription(
             detail="No delivery address found for the subscription.",
         )
 
-    # Get the next scheduled charge date.
-    next_charge_date = subscription.get(
-        "next_charge_scheduled_at"
-    )
-
-    if not next_charge_date:
-        raise HTTPException(
-            status_code=400,
-            detail="Subscription has no scheduled charge date.",
-        )
-
     # Add the product as a ONE-TIME item.
     # This does NOT create a new recurring subscription.
     onetime = create_onetime(
         address_id=address["id"],
         variant_id=variant_id,
         quantity=quantity,
-        next_charge_scheduled_at=next_charge_date,
     )
 
     return {

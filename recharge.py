@@ -202,20 +202,22 @@ def create_onetime(
     address_id,
     variant_id,
     quantity=1,
-    next_charge_scheduled_at=None,
 ):
+    """
+    Add a product as a one-time item to the customer's
+    next existing Recharge charge.
+
+    This does NOT create a new recurring subscription.
+    """
+
     payload = {
         "address_id": int(address_id),
         "external_variant_id": {
             "ecommerce": str(variant_id)
         },
         "quantity": int(quantity),
+        "add_to_next_charge": True,
     }
-
-    if next_charge_scheduled_at:
-        payload["next_charge_scheduled_at"] = (
-            next_charge_scheduled_at
-        )
 
     response = _request(
         "POST",
