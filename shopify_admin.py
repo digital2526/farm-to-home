@@ -37,10 +37,14 @@ def _get_access_token():
 
     response = requests.post(
         f"https://{_shop_domain()}/admin/oauth/access_token",
-        json={
+        data={
             "client_id": SHOPIFY_CLIENT_ID,
             "client_secret": SHOPIFY_API_SECRET,
             "grant_type": "client_credentials",
+        },
+        headers={
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept": "application/json",
         },
         timeout=15,
     )
