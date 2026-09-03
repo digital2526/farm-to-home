@@ -5,7 +5,6 @@ from recharge import (
     get_customer_by_shopify_id,
     get_addresses,
     get_subscriptions,
-    get_charges,
     create_subscription,
 )
 
@@ -65,23 +64,65 @@ def create_extra_subscription(
             detail="Customer has no subscription.",
         )
 
-    # Use an ACTIVE subscription to get the customer's
-    # delivery address.
-    active_subscriptions = [
-        subscription
-        for subscription in subscriptions
-        if subscription.get("status", "").upper() == "ACTIVE"
-    ]
+    # IMPORTANT:
+    # Use only ACTIVE NON-EXTRA subscriptions as the
+    # source for the customer's normal menu/delivery date.
+    #
+    # Extra subscriptions created by this feature have:
+    # subscription_type = extra
+    #
+    # We must NOT use those subscriptions to determine
+    # the customer's next menu date.
+    base_subscriptions = []
 
-    if not active_subscriptions:
-        raise HTTPException(
-            status_code=400,
-            detail="Customer has no active subscription.",
+    for subscription in subscriptions:
+        if subscription.get("status", "").upper() != "ACTIVE":
+            continue
+
+        properties = subscription.get(
+            "properties",
+            [],
         )
 
-    subscription = active_subscriptions[0]
+        is_extra = any(
+            prop.get("name") == "subscription_type"
+            and prop.get("value") == "extra"
+            for prop in properties
+        )
 
-    # Get the delivery address from the active subscription.
+        if not is_extra:
+            base_subscriptions.append(subscription)
+
+    if not base_subscriptions:
+        raise HTTPException(
+            status_code=400,
+            detail="Customer has no active base subscription.",
+        )
+
+    # Find the customer's earliest upcoming base
+    # subscription charge.
+    scheduled_base_subscriptions = [
+        subscription
+        for subscription in base_subscriptions
+        if subscription.get("next_charge_scheduled_at")
+    ]
+
+    if not scheduled_base_subscriptions:
+        raise HTTPException(
+            status_code=400,
+            detail="Base subscription has no scheduled charge date.",
+        )
+
+    scheduled_base_subscriptions.sort(
+        key=lambda subscription: (
+            subscription.get("next_charge_scheduled_at")
+            or ""
+        )
+    )
+
+    subscription = scheduled_base_subscriptions[0]
+
+    # Get the address belonging to the base subscription.
     address_id = subscription.get("address_id")
 
     if not address_id:
@@ -106,36 +147,16 @@ def create_extra_subscription(
             detail="No delivery address found for the subscription.",
         )
 
-    # Find the customer's actual upcoming queued charge.
-    queued_charges = get_charges(
-        status="QUEUED",
-        address_id=address_id,
-    ).get("charges", [])
-
-    if not queued_charges:
-        raise HTTPException(
-            status_code=400,
-            detail="No upcoming queued charge found for this delivery address.",
-        )
-
-    # Select the earliest upcoming queued charge.
-    queued_charges.sort(
-        key=lambda charge: charge.get("scheduled_at", "")
+    # This is the actual next delivery date used by the
+    # customer's existing menu subscription.
+    next_charge_date = subscription.get(
+        "next_charge_scheduled_at"
     )
 
-    next_charge = queued_charges[0]
-
-    next_charge_date = next_charge.get("scheduled_at")
-
-    if not next_charge_date:
-        raise HTTPException(
-            status_code=400,
-            detail="Upcoming queued charge has no scheduled date.",
-        )
-
     # Create the extra as a recurring weekly subscription.
-    # It starts with the customer's next upcoming charge
-    # and continues every week.
+    #
+    # It starts on the same date as the customer's
+    # existing menu subscription and then repeats weekly.
     new_subscription = create_subscription(
         address_id=address_id,
         variant_id=variant_id,
@@ -145,5 +166,7 @@ def create_extra_subscription(
 
     return {
         "success": True,
-        "subscription": new_subscription.get("subscription"),
+        "subscription": new_subscription.get(
+            "subscription"
+        ),
     }
