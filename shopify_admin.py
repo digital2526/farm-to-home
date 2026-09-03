@@ -23,7 +23,12 @@ def _shop_domain():
     if store.startswith("http://"):
         store = store[len("http://"):]
 
-    return store.rstrip("/")
+    store = store.rstrip("/")
+
+    if store.endswith(".myshopify.com"):
+        return store
+
+    return f"{store}.myshopify.com"
 
 
 def _get_access_token():
