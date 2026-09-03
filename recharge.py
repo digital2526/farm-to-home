@@ -318,7 +318,7 @@ def get_extra_subscription_by_variant(
     for subscription in subscriptions:
 
         if (
-            subscription["shopify_variant_id"]
+            subscription.get("shopify_variant_id")
             == int(variant_id)
             and any(
                 p["name"] == "subscription_type"
