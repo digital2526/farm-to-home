@@ -227,10 +227,18 @@ def create_extra_subscription(
         quantity=quantity,
         next_charge_date=next_charge_date,
     )
+    
+    print("\n========== CREATED EXTRA ==========")
+    print(new_subscription)
+    print("===================================\n")
 
     created_subscription = new_subscription.get(
         "subscription"
     )
+    
+    print("\n========== CREATED SUBSCRIPTION ==========")
+    print(created_subscription)
+    print("==========================================\n")
 
     if not created_subscription:
         raise HTTPException(
