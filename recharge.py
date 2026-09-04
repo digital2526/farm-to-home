@@ -380,18 +380,44 @@ def get_extra_subscription_by_variant(
         customer_id
     )["subscriptions"]
 
+    target_variant_id = str(variant_id)
+
     for subscription in subscriptions:
-        if (
+
+        properties = subscription.get(
+            "properties",
+            [],
+        )
+
+        is_extra = any(
+            str(p.get("name", "")).lower()
+            == "subscription_type"
+            and str(p.get("value", "")).lower()
+            == "extra"
+            for p in properties
+        )
+
+        if not is_extra:
+            continue
+
+        subscription_variant_id = (
             subscription.get("shopify_variant_id")
-            == int(variant_id)
-            and any(
-                p.get("name") == "subscription_type"
-                and p.get("value") == "extra"
-                for p in subscription.get(
-                    "properties",
-                    [],
-                )
+        )
+
+        if not subscription_variant_id:
+            external_variant_id = subscription.get(
+                "external_variant_id",
+                {},
             )
+
+            subscription_variant_id = (
+                external_variant_id.get("ecommerce")
+            )
+
+        if (
+            subscription_variant_id
+            and str(subscription_variant_id)
+            == target_variant_id
         ):
             return subscription
 

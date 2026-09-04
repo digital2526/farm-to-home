@@ -8,6 +8,8 @@ from recharge import (
     get_charges,
     create_subscription,
     set_subscription_next_charge_date,
+    get_extra_subscription_by_variant,
+    update_subscription_quantity,
 )
 
 def _is_extra_subscription(subscription):
@@ -63,6 +65,28 @@ def create_extra_subscription(
         )
 
     recharge_customer_id = customer["id"]
+    
+    existing = get_extra_subscription_by_variant(
+    recharge_customer_id,
+    variant_id
+    )
+
+    if existing:
+        updated = update_subscription_quantity(
+            existing["id"],
+            quantity
+        )
+
+        return {
+            "success": True,
+            "delivery_date": updated["subscription"].get(
+                "next_charge_scheduled_at"
+            ),
+            "address_id": updated["subscription"].get(
+                "address_id"
+            ),
+            "subscription": updated["subscription"],
+        }
 
     # ---------------------------------------------------------
     # 4. Get customer's active subscriptions
