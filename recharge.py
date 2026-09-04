@@ -219,13 +219,27 @@ def delete_subscription(subscription_id):
 # -------------------------------------------------
 
 def get_extra_subscriptions(customer_id):
+    
+    print("🔵 get_extra_subscriptions START")
+    print("customer_id:", customer_id)
+
     subscriptions = get_subscriptions(
         customer_id
     )["subscriptions"]
 
+    print("🟡 TOTAL RECHARGE SUBSCRIPTIONS:", len(subscriptions))
+    print("🟡 SUBSCRIPTIONS:")
+    print(subscriptions)
+    
     extras = []
 
     for subscription in subscriptions:
+        print("🔎 CHECKING SUBSCRIPTION:", subscription.get("id"))
+        print("   properties:", subscription.get("properties"))
+        print("   product_title:", subscription.get("product_title"))
+        print("   shopify_variant_id:", subscription.get("shopify_variant_id"))
+        print("   external_variant_id:", subscription.get("external_variant_id"))
+        
         properties = subscription.get(
             "properties",
             [],
@@ -253,6 +267,8 @@ def get_extra_subscriptions(customer_id):
             )
 
         if not variant_id:
+            print("   ❌ NO VARIANT ID - SKIPPING")
+            
             continue
 
         extras.append(
@@ -273,7 +289,8 @@ def get_extra_subscriptions(customer_id):
                 ),
             }
         )
-
+    print("🟢 FINAL EXTRAS:", extras)
+    
     return extras
 
 def set_subscription_next_charge_date(
@@ -325,7 +342,8 @@ def get_valid_extra_subscription(
     subscriptions = get_subscriptions(
         recharge_customer_id
     )["subscriptions"]
-
+    
+    
     for subscription in subscriptions:
         if subscription.get("id") != int(subscription_id):
             continue

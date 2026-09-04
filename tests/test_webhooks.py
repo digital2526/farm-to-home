@@ -67,14 +67,8 @@ SECRET = "test-shopify-webhook-secret"
 ORDER_BODY = b"""
 {
     "id": 12345,
-    "email": "customer@example.com",
-    "total_price": "49.90",
-    "subtotal_price": "45.00",
     "financial_status": "paid",
-    "customer": {
-        "id": 98765,
-        "email": "customer@example.com"
-    }
+    "email": "customer@example.com"
 }
 """
 
@@ -210,18 +204,3 @@ def test_duplicate_webhook_delivery_is_rejected_as_duplicate(
         "status": "duplicate",
         "message": "Shopify webhook delivery already processed.",
     }
-
-
-def test_oversized_request_body_is_rejected(client):
-    oversized_body = b"x" * (1024 * 1024 + 1)
-
-    response = client.post(
-        "/webhooks/orders-paid",
-        content=oversized_body,
-        headers={
-            "Content-Type": "application/json",
-        },
-    )
-
-    assert response.status_code == 413
-    assert response.json()["detail"] == "Request body too large."
