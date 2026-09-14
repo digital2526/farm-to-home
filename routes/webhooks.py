@@ -100,28 +100,11 @@ async def orders_paid(
     # process_paid_order() -> award_seeds()
     # award_seeds() commits the transaction.
     # ---------------------------------------------------------
-    customer = process_paid_order(
+    result = process_paid_order(
         db=db,
         order=order,
     )
 
-    # ---------------------------------------------------------
-    # 8. Existing order-level duplicate protection.
-    #
-    # We still record the webhook delivery because this was
-    # a legitimate Shopify delivery, even if the order itself
-    # had already been processed.
-    # ---------------------------------------------------------
-    if customer is None:
-        db.commit()
+    db.commit()
 
-        return {
-            "status": "duplicate",
-            "message": "Seeds already awarded for this order.",
-        }
-
-    return {
-        "status": "success",
-        "customer_id": customer.id,
-        "balance": customer.current_balance,
-    }
+    return result

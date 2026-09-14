@@ -164,6 +164,7 @@ def create_subscription(
     variant_id,
     quantity,
     next_charge_date,
+    properties=None,
 ):
     payload = {
         "address_id": int(address_id),
@@ -172,15 +173,13 @@ def create_subscription(
         },
         "quantity": int(quantity),
 
-        # Recurring every week
         "order_interval_unit": "week",
         "order_interval_frequency": 1,
         "charge_interval_frequency": 1,
 
-        # Recharge requires the first charge date.
         "next_charge_scheduled_at": next_charge_date,
 
-        "properties": [
+        "properties": properties if properties is not None else [
             {
                 "name": "subscription_type",
                 "value": "extra",
