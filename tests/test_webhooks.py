@@ -168,7 +168,8 @@ def test_valid_webhook_is_processed(client, monkeypatch):
     )
 
     assert response.status_code == 200
-    assert response.json()["status"] == "duplicate"
+    assert response.json()["status"] == "ignored"
+    assert response.json()["reason"] == "not_weekly_meal_plan"
 
 
 def test_duplicate_webhook_delivery_is_rejected_as_duplicate(

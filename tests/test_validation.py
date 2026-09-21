@@ -63,6 +63,24 @@ def test_valid_variant_is_allowed(monkeypatch):
                     "status": "ACTIVE",
                     "next_charge_scheduled_at": "2026-09-10T10:00:00Z",
                     "address_id": "address-123",
+                    "properties": [
+                        {
+                            "name": "_plan_parent",
+                            "value": "true",
+                        }
+                    ],
+                }
+            ]
+        },
+    )
+
+    monkeypatch.setattr(
+        add_extra,
+        "get_charges",
+        lambda **kwargs: {
+            "charges": [
+                {
+                    "scheduled_at": "2026-09-10T10:00:00Z"
                 }
             ]
         },
@@ -74,6 +92,17 @@ def test_valid_variant_is_allowed(monkeypatch):
         lambda **kwargs: {
             "subscription": {
                 "id": "new-subscription"
+            }
+        },
+    )
+
+    monkeypatch.setattr(
+        add_extra,
+        "set_subscription_next_charge_date",
+        lambda subscription_id, date: {
+            "subscription": {
+                "id": subscription_id,
+                "next_charge_scheduled_at": date,
             }
         },
     )

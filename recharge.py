@@ -82,13 +82,14 @@ def _request(method, url, *, retry=False, **kwargs):
 
         except requests.exceptions.HTTPError as exc:
             status_code = response.status_code
+            response_text = getattr(response, "text", "")
 
             raise HTTPException(
                 status_code=status_code,
                 detail=(
                     f"Recharge API request failed with status "
-                    f"{status_code}: {response.text}"
-                ),
+                    f"{status_code}. {response_text}"
+                ).strip(),
             ) from exc
 
         except requests.exceptions.RequestException as exc:
@@ -119,6 +120,7 @@ def get_subscriptions(customer_id):
             "GET",
             f"{BASE_URL}/subscriptions",
             params=params,
+            retry=True,
         )
 
         data = response.json()
@@ -164,23 +166,10 @@ def create_subscription(
     variant_id,
     quantity,
     next_charge_date,
+    properties=None,
 ):
-    payload = {
-        "address_id": int(address_id),
-        "external_variant_id": {
-            "ecommerce": str(variant_id)
-        },
-        "quantity": int(quantity),
-
-        # Recurring every week
-        "order_interval_unit": "week",
-        "order_interval_frequency": 1,
-        "charge_interval_frequency": 1,
-
-        # Recharge requires the first charge date.
-        "next_charge_scheduled_at": next_charge_date,
-
-        "properties": [
+    if properties is None:
+        properties = [
             {
                 "name": "subscription_type",
                 "value": "extra",
@@ -189,7 +178,22 @@ def create_subscription(
                 "name": "subscriber_discount",
                 "value": "25",
             },
-        ],
+        ]
+
+    payload = {
+        "address_id": int(address_id),
+        "external_variant_id": {
+            "ecommerce": str(variant_id)
+        },
+        "quantity": int(quantity),
+
+        "order_interval_unit": "week",
+        "order_interval_frequency": 1,
+        "charge_interval_frequency": 1,
+
+        "next_charge_scheduled_at": next_charge_date,
+
+        "properties": properties,
     }
 
     response = _request(
