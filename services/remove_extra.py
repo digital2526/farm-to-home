@@ -2,12 +2,15 @@ from fastapi import HTTPException
 
 from recharge import (
     get_customer_by_shopify_id,
-    get_valid_extra_subscription,
-    delete_subscription,
+    get_valid_extra_onetime,
+    delete_onetime,
 )
 
-def remove_extra(shopify_customer_id, subscription_id):
 
+def remove_extra(
+    shopify_customer_id,
+    subscription_id,
+):
     customer = get_customer_by_shopify_id(
         shopify_customer_id
     )
@@ -20,15 +23,17 @@ def remove_extra(shopify_customer_id, subscription_id):
 
     recharge_customer_id = customer["id"]
 
-    subscription = get_valid_extra_subscription(
+    onetime = get_valid_extra_onetime(
         recharge_customer_id,
         subscription_id,
     )
 
-    if not subscription:
+    if not onetime:
         raise HTTPException(
             status_code=403,
-            detail="Subscription is not an approved extra."
+            detail="One-time item is not an approved extra."
         )
 
-    return delete_subscription(subscription_id)
+    return delete_onetime(
+        subscription_id
+    )

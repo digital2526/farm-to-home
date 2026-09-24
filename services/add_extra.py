@@ -1,16 +1,21 @@
+from decimal import Decimal, ROUND_HALF_UP
+
 from fastapi import HTTPException
 
-from shopify_admin import is_extra_variant
+from shopify_admin import (
+    is_extra_variant,
+    get_shopify_variant_price,
+)
 
 from recharge import (
     get_customer_by_shopify_id,
     get_subscriptions,
     get_charges,
-    create_subscription,
-    set_subscription_next_charge_date,
-    get_extra_subscription_by_variant,
-    update_subscription_quantity,
+    create_onetime,
+    get_extra_onetime_by_variant,
+    update_onetime_quantity,
 )
+
 
 def _is_extra_subscription(subscription):
     properties = subscription.get(
@@ -21,7 +26,9 @@ def _is_extra_subscription(subscription):
     for prop in properties:
         if (
             prop.get("name") == "subscription_type"
-            and str(prop.get("value", "")).lower() == "extra"
+            and str(
+                prop.get("value", "")
+            ).lower() == "extra"
         ):
             return True
 
@@ -36,24 +43,29 @@ def create_extra_subscription(
     # ---------------------------------------------------------
     # 1. Validate quantity
     # ---------------------------------------------------------
+
     if quantity < 1:
         raise HTTPException(
             status_code=400,
             detail="Quantity must be at least 1.",
         )
 
+
     # ---------------------------------------------------------
-    # 2. Validate that this Shopify variant is an Add Extra
+    # 2. Validate Add Extra product
     # ---------------------------------------------------------
+
     if not is_extra_variant(variant_id):
         raise HTTPException(
             status_code=400,
             detail="This product is not available as an extra.",
         )
 
+
     # ---------------------------------------------------------
     # 3. Find Recharge customer
     # ---------------------------------------------------------
+
     customer = get_customer_by_shopify_id(
         shopify_customer_id
     )
@@ -65,50 +77,16 @@ def create_extra_subscription(
         )
 
     recharge_customer_id = customer["id"]
-    
-    existing = get_extra_subscription_by_variant(
-    recharge_customer_id,
-    variant_id
-    )
 
-    if existing:
-        updated = update_subscription_quantity(
-            existing["id"],
-            quantity
-        )
-
-        return {
-            "success": True,
-            "delivery_date": updated["subscription"].get(
-                "next_charge_scheduled_at"
-            ),
-            "address_id": updated["subscription"].get(
-                "address_id"
-            ),
-            "subscription": updated["subscription"],
-        }
 
     # ---------------------------------------------------------
-    # 4. Get customer's active subscriptions
+    # 4. Get active subscriptions
     # ---------------------------------------------------------
+
     subscriptions_response = get_subscriptions(
         recharge_customer_id
     )
-    
-    print("\n========== CUSTOMER SUBSCRIPTIONS ==========")
 
-    for s in subscriptions_response.get("subscriptions", []):
-        print({
-            "id": s.get("id"),
-            "product_title": s.get("product_title"),
-            "address_id": s.get("address_id"),
-            "next_charge_scheduled_at": s.get("next_charge_scheduled_at"),
-            "status": s.get("status"),
-            "properties": s.get("properties"),
-        })
-
-    print("============================================\n")
-    
     subscriptions = subscriptions_response.get(
         "subscriptions",
         [],
@@ -120,22 +98,28 @@ def create_extra_subscription(
             detail="Customer has no subscription.",
         )
 
+
     # ---------------------------------------------------------
-    # 5. Keep only ACTIVE NON-EXTRA subscriptions
-    #
-    # These are the customer's normal/menu subscriptions.
+    # 5. Find active BASE meal-plan subscription
     # ---------------------------------------------------------
-    base_subscriptions = []
+
+    main_subscription = None
 
     for subscription in subscriptions:
+
         status = str(
-            subscription.get("status", "")
+            subscription.get(
+                "status",
+                ""
+            )
         ).lower()
 
         if status != "active":
             continue
 
-        if _is_extra_subscription(subscription):
+        if _is_extra_subscription(
+            subscription
+        ):
             continue
 
         address_id = subscription.get(
@@ -145,52 +129,54 @@ def create_extra_subscription(
         if not address_id:
             continue
 
-        base_subscriptions.append(
-            subscription
+        properties = subscription.get(
+            "properties",
+            []
         )
 
-    if not base_subscriptions:
-        raise HTTPException(
-            status_code=400,
-            detail="Customer has no active base subscription.",
+        is_plan_parent = any(
+            prop.get("name") == "_plan_parent"
+            and str(
+                prop.get("value", "")
+            ).lower() == "true"
+            for prop in properties
         )
 
-    # ---------------------------------------------------------
-    # 6. Find the customer's main meal-plan address
-    # ---------------------------------------------------------
-    main_subscription = None
-
-    for subscription in base_subscriptions:
-        properties = subscription.get("properties", [])
-
-        for prop in properties:
-            if (
-                prop.get("name") == "_plan_parent"
-                and str(prop.get("value", "")).lower() == "true"
-            ):
-                main_subscription = subscription
-                break
-
-        if main_subscription:
+        if is_plan_parent:
+            main_subscription = subscription
             break
 
+
     if not main_subscription:
+
         raise HTTPException(
             status_code=400,
-            detail="Customer has no active main meal-plan subscription.",
+            detail=(
+                "Customer has no active main "
+                "meal-plan subscription."
+            ),
         )
 
-    address_id = main_subscription.get("address_id")
+
+    address_id = main_subscription.get(
+        "address_id"
+    )
 
     if not address_id:
+
         raise HTTPException(
             status_code=400,
-            detail="Main meal-plan subscription has no address.",
+            detail=(
+                "Main meal-plan subscription "
+                "has no address."
+            ),
         )
 
+
     # ---------------------------------------------------------
-    # 7. Find the next queued charge for the main meal-plan address
+    # 6. Find customer's NEXT queued charge
     # ---------------------------------------------------------
+
     charges_response = get_charges(
         status="QUEUED",
         limit=250,
@@ -200,62 +186,186 @@ def create_extra_subscription(
 
     charges = [
         charge
-        for charge in charges_response.get("charges", [])
+        for charge in charges_response.get(
+            "charges",
+            []
+        )
         if charge.get("scheduled_at")
     ]
 
     if not charges:
+
         raise HTTPException(
             status_code=400,
-            detail="Customer has no queued delivery charge for the main meal plan.",
+            detail=(
+                "Customer has no queued delivery "
+                "charge for the main meal plan."
+            ),
         )
 
+
     charges.sort(
-        key=lambda charge: charge["scheduled_at"]
+        key=lambda charge:
+            charge["scheduled_at"]
     )
 
     next_charge = charges[0]
 
-    next_charge_date = next_charge["scheduled_at"]
+    next_charge_date = (
+        next_charge["scheduled_at"]
+    )
+
 
     # ---------------------------------------------------------
-    # 8. Create recurring weekly extra
+    # 7. Check if same extra is already added
+    #    to THIS next delivery
     # ---------------------------------------------------------
-    new_subscription = create_subscription(
+
+    existing = get_extra_onetime_by_variant(
+        customer_id=recharge_customer_id,
+        variant_id=variant_id,
+        address_id=address_id,
+        next_charge_date=next_charge_date,
+    )
+
+    if existing:
+
+        updated = update_onetime_quantity(
+            existing["id"],
+            quantity,
+        )
+
+        onetime = updated.get(
+            "onetime"
+        )
+
+        if not onetime:
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    "Recharge did not return "
+                    "the updated one-time item."
+                ),
+            )
+
+        return {
+            "success": True,
+            "delivery_date":
+                next_charge_date,
+            "address_id":
+                address_id,
+            "subscription":
+                onetime,
+        }
+
+
+    # ---------------------------------------------------------
+    # 8. Get Shopify product price
+    # ---------------------------------------------------------
+
+    try:
+
+        original_price = (
+            get_shopify_variant_price(
+                variant_id
+            )
+        )
+
+    except Exception as exc:
+
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "Unable to retrieve Shopify "
+                "variant price."
+            ),
+        ) from exc
+
+
+    # ---------------------------------------------------------
+    # 9. Apply 25% subscriber discount
+    # ---------------------------------------------------------
+
+    discounted_price = (
+        original_price
+        * Decimal("0.75")
+    ).quantize(
+        Decimal("0.01"),
+        rounding=ROUND_HALF_UP,
+    )
+
+
+    # ---------------------------------------------------------
+    # 10. Create ONE-TIME Recharge item
+    # ---------------------------------------------------------
+
+    new_onetime = create_onetime(
         address_id=address_id,
         variant_id=variant_id,
         quantity=quantity,
         next_charge_date=next_charge_date,
-    )
-    
-    print("\n========== CREATED EXTRA ==========")
-    print(new_subscription)
-    print("===================================\n")
+        price=discounted_price,
+        properties=[
+            {
+                "name":
+                    "subscription_type",
 
-    created_subscription = new_subscription.get(
-        "subscription"
-    )
-    
-    print("\n========== CREATED SUBSCRIPTION ==========")
-    print(created_subscription)
-    print("==========================================\n")
+                "value":
+                    "extra",
+            },
+            {
+                "name":
+                    "subscriber_discount",
 
-    if not created_subscription:
+                "value":
+                    "25",
+            },
+        ],
+    )
+
+
+    print(
+        "\n========== CREATED ONE-TIME =========="
+    )
+
+    print(new_onetime)
+
+    print(
+        "======================================\n"
+    )
+
+
+    created_onetime = (
+        new_onetime.get(
+            "onetime"
+        )
+    )
+
+
+    if not created_onetime:
+
         raise HTTPException(
             status_code=500,
-            detail="Recharge did not return the created subscription.",
+            detail=(
+                "Recharge did not return "
+                "the created one-time item."
+            ),
         )
 
-    # Ensure the extra uses the same next-charge date
-    set_subscription_next_charge_date(
-        subscription_id=created_subscription["id"],
-        date=next_charge_date,
-    )
+
+    # ---------------------------------------------------------
+    # 11. Preserve existing response structure
+    # ---------------------------------------------------------
 
     return {
         "success": True,
-        "delivery_date": next_charge_date,
-        "address_id": address_id,
-        "subscription": created_subscription,
-    }
 
+        "delivery_date":
+            next_charge_date,
+
+        "address_id":
+            address_id,
+
+        "subscription":
+            created_onetime,
+    }

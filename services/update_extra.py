@@ -2,8 +2,8 @@ from fastapi import HTTPException
 
 from recharge import (
     get_customer_by_shopify_id,
-    get_valid_extra_subscription,
-    update_subscription_quantity,
+    get_valid_extra_onetime,
+    update_onetime_quantity,
 )
 
 
@@ -12,7 +12,6 @@ def update_extra(
     subscription_id,
     quantity,
 ):
-
     customer = get_customer_by_shopify_id(
         shopify_customer_id
     )
@@ -25,15 +24,15 @@ def update_extra(
 
     recharge_customer_id = customer["id"]
 
-    subscription = get_valid_extra_subscription(
+    onetime = get_valid_extra_onetime(
         recharge_customer_id,
         subscription_id,
     )
 
-    if not subscription:
+    if not onetime:
         raise HTTPException(
             status_code=403,
-            detail="Subscription is not an approved extra."
+            detail="One-time item is not an approved extra."
         )
 
     if quantity < 1:
@@ -42,12 +41,13 @@ def update_extra(
             detail="Quantity must be at least 1."
         )
 
-    updated = update_subscription_quantity(
+    updated = update_onetime_quantity(
         subscription_id,
         quantity,
     )
 
     return {
         "success": True,
-        "subscription": updated["subscription"],
+        "subscription":
+            updated["onetime"],
     }

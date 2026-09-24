@@ -21,8 +21,8 @@ def test_invalid_variant_is_rejected(monkeypatch):
     assert exc.value.status_code == 400
     assert exc.value.detail == "This product is not available as an extra."
 
-
 def test_valid_variant_is_allowed(monkeypatch):
+
     monkeypatch.setattr(
         add_extra,
         "is_extra_variant",
@@ -39,30 +39,16 @@ def test_valid_variant_is_allowed(monkeypatch):
 
     monkeypatch.setattr(
         add_extra,
-        "get_extra_subscription_by_variant",
-        lambda customer_id, variant_id: None,
-    )
-
-    monkeypatch.setattr(
-        add_extra,
-        "get_addresses",
-        lambda customer_id: {
-            "addresses": [
-                {"id": "address-123"}
-            ]
-        },
-    )
-
-    monkeypatch.setattr(
-        add_extra,
         "get_subscriptions",
         lambda customer_id: {
             "subscriptions": [
                 {
-                    "id": "subscription-123",
-                    "status": "ACTIVE",
-                    "next_charge_scheduled_at": "2026-09-10T10:00:00Z",
-                    "address_id": "address-123",
+                    "id": 884363081,
+                    "status": "active",
+                    "address_id": 12345,
+                    "next_charge_scheduled_at": (
+                        "2026-09-28T00:00:00Z"
+                    ),
                     "properties": [
                         {
                             "name": "_plan_parent",
@@ -80,7 +66,10 @@ def test_valid_variant_is_allowed(monkeypatch):
         lambda **kwargs: {
             "charges": [
                 {
-                    "scheduled_at": "2026-09-10T10:00:00Z"
+                    "id": 900001,
+                    "scheduled_at": (
+                        "2026-09-28T00:00:00Z"
+                    ),
                 }
             ]
         },
@@ -88,33 +77,57 @@ def test_valid_variant_is_allowed(monkeypatch):
 
     monkeypatch.setattr(
         add_extra,
-        "create_subscription",
-        lambda **kwargs: {
-            "subscription": {
-                "id": "new-subscription"
-            }
-        },
+        "get_extra_onetime_by_variant",
+        lambda **kwargs: None,
     )
 
     monkeypatch.setattr(
         add_extra,
-        "set_subscription_next_charge_date",
-        lambda subscription_id, date: {
-            "subscription": {
-                "id": subscription_id,
-                "next_charge_scheduled_at": date,
+        "get_shopify_variant_price",
+        lambda variant_id: 10,
+    )
+
+    monkeypatch.setattr(
+        add_extra,
+        "create_onetime",
+        lambda **kwargs: {
+            "onetime": {
+                "id": 700001,
+                "address_id": 12345,
+                "external_variant_id": {
+                    "ecommerce": "123456"
+                },
+                "quantity": 1,
+                "price": "7.50",
+                "next_charge_scheduled_at": (
+                    "2026-09-28T00:00:00Z"
+                ),
+                "properties": [
+                    {
+                        "name": "subscription_type",
+                        "value": "extra",
+                    },
+                    {
+                        "name": "subscriber_discount",
+                        "value": "25",
+                    },
+                ],
             }
         },
     )
 
     result = add_extra.create_extra_subscription(
-        shopify_customer_id="123",
-        variant_id=58829308559744,
+        shopify_customer_id=123456,
+        variant_id=123456,
         quantity=1,
     )
 
     assert result["success"] is True
-
+    assert result["delivery_date"] == (
+        "2026-09-28T00:00:00Z"
+    )
+    assert result["address_id"] == 12345
+    assert result["subscription"]["id"] == 700001
 
 def test_zero_quantity_is_rejected(monkeypatch):
     monkeypatch.setattr(

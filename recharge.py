@@ -1,6 +1,7 @@
 import time
 
 import requests
+from datetime import datetime
 from fastapi import HTTPException
 
 from config import BASE_URL, HEADERS
@@ -203,6 +204,355 @@ def create_subscription(
     )
 
     return response.json()
+
+
+# -------------------------------------------------
+# One-times
+# -------------------------------------------------
+
+def get_onetimes(
+    customer_id=None,
+    address_id=None,
+):
+    onetimes = []
+    cursor = None
+
+    while True:
+        params = {
+            "limit": 250,
+        }
+
+        if customer_id is not None:
+            params["customer_id"] = customer_id
+
+        if address_id is not None:
+            params["address_id"] = address_id
+
+        if cursor:
+            params["cursor"] = cursor
+
+        response = _request(
+            "GET",
+            f"{BASE_URL}/onetimes",
+            params=params,
+            retry=True,
+        )
+
+        data = response.json()
+
+        onetimes.extend(
+            data.get("onetimes", [])
+        )
+
+        # Recharge may expose cursor as next_cursor
+        # or next depending on response format.
+        cursor = (
+            data.get("next_cursor")
+            or data.get("next")
+        )
+
+        if not cursor:
+            break
+
+    return {
+        "onetimes": onetimes
+    }
+
+
+def get_onetime(onetime_id):
+    response = _request(
+        "GET",
+        f"{BASE_URL}/onetimes/{onetime_id}",
+        retry=True,
+    )
+
+    return response.json()
+
+
+def create_onetime(
+    address_id,
+    variant_id,
+    quantity,
+    next_charge_date,
+    price,
+    properties=None,
+):
+    if properties is None:
+        properties = [
+            {
+                "name": "subscription_type",
+                "value": "extra",
+            },
+            {
+                "name": "subscriber_discount",
+                "value": "25",
+            },
+        ]
+
+    payload = {
+        "address_id": int(address_id),
+
+        "next_charge_scheduled_at":
+            next_charge_date,
+
+        "external_variant_id": {
+            "ecommerce": str(variant_id)
+        },
+
+        "quantity": int(quantity),
+
+        "price": str(price),
+
+        "properties": properties,
+    }
+
+    response = _request(
+        "POST",
+        f"{BASE_URL}/onetimes",
+        json=payload,
+    )
+
+    return response.json()
+
+
+def update_onetime_quantity(
+    onetime_id,
+    quantity,
+):
+    payload = {
+        "quantity": int(quantity),
+    }
+
+    response = _request(
+        "PUT",
+        f"{BASE_URL}/onetimes/{onetime_id}",
+        json=payload,
+    )
+
+    return response.json()
+
+
+def delete_onetime(onetime_id):
+    _request(
+        "DELETE",
+        f"{BASE_URL}/onetimes/{onetime_id}",
+    )
+
+    return {
+        "success": True,
+    }
+
+
+def _is_extra_onetime(onetime):
+    properties = onetime.get(
+        "properties",
+        [],
+    )
+
+    return any(
+        str(prop.get("name", "")).lower()
+        == "subscription_type"
+        and str(prop.get("value", "")).lower()
+        == "extra"
+        for prop in properties
+    )
+
+
+def _get_onetime_variant_id(onetime):
+    variant_id = onetime.get(
+        "shopify_variant_id"
+    )
+
+    if variant_id:
+        return str(variant_id)
+
+    external_variant_id = onetime.get(
+        "external_variant_id",
+        {}
+    )
+
+    if isinstance(external_variant_id, dict):
+        variant_id = external_variant_id.get(
+            "ecommerce"
+        )
+
+    return (
+        str(variant_id)
+        if variant_id is not None
+        else None
+    )
+
+
+def get_extra_onetime_by_variant(
+    customer_id,
+    variant_id,
+    address_id=None,
+    next_charge_date=None,
+):
+    onetimes = get_onetimes(
+        customer_id=customer_id,
+        address_id=address_id,
+    )["onetimes"]
+
+    target_variant_id = str(
+        variant_id
+    )
+
+    for onetime in onetimes:
+
+        if onetime.get("is_cancelled"):
+            continue
+
+        if not _is_extra_onetime(onetime):
+            continue
+
+        onetime_variant_id = (
+            _get_onetime_variant_id(
+                onetime
+            )
+        )
+
+        if onetime_variant_id != target_variant_id:
+            continue
+
+        if (
+            next_charge_date is not None
+            and str(
+                onetime.get(
+                    "next_charge_scheduled_at",
+                    ""
+                )
+            )
+            != str(next_charge_date)
+        ):
+            continue
+
+        return onetime
+
+    return None
+
+
+def get_valid_extra_onetime(
+    recharge_customer_id,
+    onetime_id,
+):
+    onetimes = get_onetimes(
+        customer_id=recharge_customer_id,
+    )["onetimes"]
+
+    try:
+        target_id = int(onetime_id)
+    except (TypeError, ValueError):
+        return None
+
+    for onetime in onetimes:
+
+        if onetime.get("id") != target_id:
+            continue
+
+        if onetime.get("is_cancelled"):
+            return None
+
+        if _is_extra_onetime(onetime):
+            return onetime
+
+        return None
+
+    return None
+
+
+def _same_datetime(value_a, value_b):
+    if not value_a or not value_b:
+        return False
+
+    try:
+        dt_a = datetime.fromisoformat(
+            str(value_a).replace("Z", "+00:00")
+        )
+        dt_b = datetime.fromisoformat(
+            str(value_b).replace("Z", "+00:00")
+        )
+
+        if dt_a.tzinfo and dt_b.tzinfo:
+            return dt_a.astimezone().timestamp() == dt_b.astimezone().timestamp()
+
+        return dt_a.replace(tzinfo=None) == dt_b.replace(tzinfo=None)
+
+    except (ValueError, TypeError):
+        return str(value_a) == str(value_b)
+    
+    
+def get_extra_onetimes(
+    customer_id,
+    address_id,
+    next_charge_date,
+):
+    onetimes = get_onetimes(
+        customer_id=customer_id,
+        address_id=address_id,
+    )["onetimes"]
+
+    extras = []
+
+    for onetime in onetimes:
+
+        if onetime.get("is_cancelled"):
+            continue
+
+        if not _is_extra_onetime(onetime):
+            continue
+
+        onetime_date = onetime.get(
+            "next_charge_scheduled_at"
+        )
+
+        if not _same_datetime(
+            onetime_date,
+            next_charge_date,
+        ):
+            continue
+
+        variant_id = _get_onetime_variant_id(
+            onetime
+        )
+
+        if not variant_id:
+            continue
+
+        extras.append(
+            {
+                "subscription_id":
+                    onetime["id"],
+
+                "variant_id":
+                    int(variant_id),
+
+                "title":
+                    onetime.get(
+                        "product_title",
+                        onetime.get(
+                            "title",
+                            ""
+                        )
+                    ),
+
+                "price":
+                    onetime.get(
+                        "price",
+                        0
+                    ),
+
+                "quantity":
+                    onetime.get(
+                        "quantity",
+                        1
+                    ),
+            }
+        )
+
+    return extras
+
+
 # -------------------------------------------------
 # Delete subscription
 # -------------------------------------------------
@@ -306,6 +656,22 @@ def set_subscription_next_charge_date(
         f"{BASE_URL}/subscriptions/{subscription_id}/set_next_charge_date",
         json={
             "date": date,
+        },
+    )
+
+    return response.json()
+
+
+def set_subscription_expire_after_charges(
+    subscription_id,
+    number_of_charges=1,
+):
+    response = _request(
+        "PUT",
+        f"{BASE_URL}/subscriptions/{subscription_id}",
+        json={
+            "expire_after_specific_number_of_charges":
+                int(number_of_charges)
         },
     )
 

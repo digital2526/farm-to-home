@@ -1,5 +1,6 @@
 import time
 import requests
+from decimal import Decimal, InvalidOperation
 
 from config import (
     SHOPIFY_ADMIN_API_VERSION,
@@ -143,3 +144,78 @@ def is_extra_variant(variant_id):
         str(tag).strip().lower() == EXTRA_PRODUCT_TAG
         for tag in tags
     )
+    
+
+# -------------------------------------------------
+# Get Shopify variant price
+# -------------------------------------------------
+
+def get_shopify_variant_price(variant_id):
+    try:
+        variant_id = int(variant_id)
+    except (TypeError, ValueError):
+        raise RuntimeError(
+            "Invalid Shopify variant ID."
+        )
+
+    query = """
+    query GetVariantPrice($id: ID!) {
+      productVariant(id: $id) {
+        id
+        price
+      }
+    }
+    """
+
+    response = requests.post(
+        f"https://{_shop_domain()}/admin/api/"
+        f"{SHOPIFY_ADMIN_API_VERSION}/graphql.json",
+        json={
+            "query": query,
+            "variables": {
+                "id": f"gid://shopify/ProductVariant/{variant_id}"
+            },
+        },
+        headers={
+            "Content-Type": "application/json",
+            "X-Shopify-Access-Token": _get_access_token(),
+        },
+        timeout=15,
+    )
+
+    if not response.ok:
+        raise RuntimeError(
+            f"Shopify price request failed: "
+            f"HTTP {response.status_code} - {response.text}"
+        )
+
+    data = response.json()
+
+    if data.get("errors"):
+        raise RuntimeError(
+            f"Shopify GraphQL error: {data['errors']}"
+        )
+
+    product_variant = (
+        data.get("data", {})
+        .get("productVariant")
+    )
+
+    if not product_variant:
+        raise RuntimeError(
+            "Shopify variant not found."
+        )
+
+    raw_price = product_variant.get("price")
+
+    if raw_price is None:
+        raise RuntimeError(
+            "Shopify variant price is missing."
+        )
+
+    try:
+        return Decimal(str(raw_price))
+    except (InvalidOperation, ValueError) as exc:
+        raise RuntimeError(
+            f"Invalid Shopify variant price: {raw_price}"
+        ) from exc
