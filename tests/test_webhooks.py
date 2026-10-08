@@ -67,11 +67,19 @@ SECRET = "test-shopify-webhook-secret"
 ORDER_BODY = b"""
 {
     "id": 12345,
+    "created_at": "2026-10-06T10:00:00+01:00",
     "financial_status": "paid",
     "email": "customer@example.com"
 }
 """
 
+def mock_set_order_delivery_details(
+    order_id,
+    delivery_date,
+    delivery_day,
+    delivery_time,
+):
+    return None
 
 def create_hmac(secret, body):
     digest = hmac.new(
@@ -96,6 +104,11 @@ def test_missing_hmac_is_rejected(client, monkeypatch):
         "routes.webhooks.SHOPIFY_WEBHOOK_SECRET",
         SECRET,
     )
+    
+    monkeypatch.setattr(
+        "routes.webhooks.set_order_delivery_details",
+        mock_set_order_delivery_details,
+    )
 
     response = client.post(
         "/webhooks/orders-paid",
@@ -114,6 +127,11 @@ def test_invalid_hmac_is_rejected(client, monkeypatch):
     monkeypatch.setattr(
         "routes.webhooks.SHOPIFY_WEBHOOK_SECRET",
         SECRET,
+    )
+    
+    monkeypatch.setattr(
+        "routes.webhooks.set_order_delivery_details",
+        mock_set_order_delivery_details,
     )
 
     response = client.post(
@@ -158,6 +176,11 @@ def test_valid_webhook_is_processed(client, monkeypatch):
         SECRET,
     )
 
+    monkeypatch.setattr(
+        "routes.webhooks.set_order_delivery_details",
+        mock_set_order_delivery_details,
+    )
+    
     response = client.post(
         "/webhooks/orders-paid",
         content=ORDER_BODY,
@@ -179,6 +202,11 @@ def test_duplicate_webhook_delivery_is_rejected_as_duplicate(
     monkeypatch.setattr(
         "routes.webhooks.SHOPIFY_WEBHOOK_SECRET",
         SECRET,
+    )
+    
+    monkeypatch.setattr(
+        "routes.webhooks.set_order_delivery_details",
+        mock_set_order_delivery_details,
     )
 
     headers = signed_headers(

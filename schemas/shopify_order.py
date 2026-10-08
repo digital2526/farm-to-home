@@ -6,6 +6,15 @@ class ShopifyCustomer(BaseModel):
     email: str | None = None
 
 
+class ShopifyAddress(BaseModel):
+    address1: str | None = None
+    address2: str | None = None
+    city: str | None = None
+    province: str | None = None
+    zip: str | None = None
+    country: str | None = None
+
+
 class ShopifyLineItemProperty(BaseModel):
     name: str
     value: str | None = None
@@ -24,11 +33,13 @@ class ShopifyOrderLineItem(BaseModel):
 
 class ShopifyOrderPaid(BaseModel):
     id: int
+    created_at: str | None = None
     email: str | None = None
     total_price: str | None = None
     subtotal_price: str | None = None
     financial_status: str
     customer: ShopifyCustomer | None = None
+    shipping_address: ShopifyAddress | None = None
 
     line_items: list[ShopifyOrderLineItem] = Field(
         default_factory=list

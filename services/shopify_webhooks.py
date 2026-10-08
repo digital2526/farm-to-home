@@ -9,12 +9,115 @@ from recharge import (
     get_subscriptions,
 )
 
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
 
 PLAN_PARENT_PROPERTY = "_plan_parent"
 PLAN_VARIANT_IDS_PROPERTY = "_plan_item_variant_ids"
 PLAN_ORDER_ID_PROPERTY = "_plan_order_id"
 
+PORTUGAL_TZ = ZoneInfo("Europe/Lisbon")
 
+
+
+def calculate_delivery_details(created_at):
+    """
+    Calculate delivery information based on the order/charge
+    creation time in Europe/Lisbon.
+
+    Cut-off:
+    Sunday 23:59 Lisbon time.
+
+    Home delivery:
+    Thursday following the cut-off.
+
+    Pickup:
+    Wednesday before that Thursday.
+    """
+
+    if created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=PORTUGAL_TZ)
+
+    local_dt = created_at.astimezone(PORTUGAL_TZ)
+
+    # Monday = 0 ... Sunday = 6
+    days_until_sunday = 6 - local_dt.weekday()
+
+    cutoff_date = local_dt.date() + timedelta(
+        days=days_until_sunday
+    )
+
+    cutoff = datetime(
+        cutoff_date.year,
+        cutoff_date.month,
+        cutoff_date.day,
+        23,
+        59,
+        59,
+        tzinfo=PORTUGAL_TZ,
+    )
+
+    # If we're already past this Sunday's cut-off,
+    # use the following Sunday.
+    if local_dt > cutoff:
+        cutoff_date += timedelta(days=7)
+
+    # Thursday immediately after Sunday
+    delivery_date = cutoff_date + timedelta(days=4)
+
+    # Wednesday immediately before Thursday
+    pickup_date = delivery_date - timedelta(days=1)
+
+    return {
+        "home": {
+            "delivery_date": delivery_date,
+            "delivery_day": "thursday",
+            "delivery_time": "Durante o dia · DPD Fresh",
+        },
+        "pickup": {
+            "delivery_date": pickup_date,
+            "delivery_day": "wednesday",
+            "delivery_time": "14:00-21:00",
+        },
+    }
+    
+def get_order_delivery_details(order):
+    """
+    Calculate delivery details for a Shopify order.
+
+    Shipping address present:
+        Thursday home delivery.
+
+    No shipping address:
+        Wednesday pickup.
+    """
+
+    if not order.created_at:
+        raise RuntimeError(
+            f"Shopify order {order.id} is missing created_at."
+        )
+
+    try:
+        created_at = datetime.fromisoformat(
+            order.created_at.replace("Z", "+00:00")
+        )
+    except ValueError as exc:
+        raise RuntimeError(
+            f"Invalid Shopify created_at for order {order.id}: "
+            f"{order.created_at}"
+        ) from exc
+
+    delivery_options = calculate_delivery_details(
+        created_at
+    )
+
+    if order.shipping_address:
+        return delivery_options["home"]
+
+    return delivery_options["pickup"]
+
+    
 def _properties_dict(properties):
     return {
         str(prop.name): prop.value

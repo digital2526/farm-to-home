@@ -73,7 +73,10 @@ app.include_router(subscription_router, prefix="/subscription")
 # New Seeds APIs
 app.include_router(seeds_router)
 
-app.include_router(webhook_router)
+app.include_router(
+    webhook_router,
+    prefix="",
+)
 
 @app.get("/")
 def health():

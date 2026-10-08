@@ -18,5 +18,5 @@ def verify_shopify_webhook(
 
     return hmac.compare_digest(
         calculated_hmac,
-        hmac_header,
+        hmac_header or "",
     )

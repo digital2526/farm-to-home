@@ -219,3 +219,116 @@ def get_shopify_variant_price(variant_id):
         raise RuntimeError(
             f"Invalid Shopify variant price: {raw_price}"
         ) from exc
+        
+# -------------------------------------------------
+# Set Shopify order delivery date
+# -------------------------------------------------
+
+# -------------------------------------------------
+# Set Shopify order delivery details
+# -------------------------------------------------
+
+def set_order_delivery_details(
+    order_id,
+    delivery_date,
+    delivery_day,
+    delivery_time,
+):
+    """
+    Save delivery information to the Shopify order:
+
+    custom.delivery_date
+    custom.delivery_day
+    custom.delivery_time
+    """
+
+    try:
+        order_id = int(order_id)
+    except (TypeError, ValueError):
+        raise RuntimeError("Invalid Shopify order ID.")
+
+    mutation = """
+    mutation SetOrderDeliveryDetails(
+        $metafields: [MetafieldsSetInput!]!
+    ) {
+        metafieldsSet(metafields: $metafields) {
+            metafields {
+                id
+                namespace
+                key
+                value
+            }
+            userErrors {
+                field
+                message
+            }
+        }
+    }
+    """
+
+    variables = {
+        "metafields": [
+            {
+                "ownerId": f"gid://shopify/Order/{order_id}",
+                "namespace": "custom",
+                "key": "delivery_date",
+                "type": "date",
+                "value": str(delivery_date),
+            },
+            {
+                "ownerId": f"gid://shopify/Order/{order_id}",
+                "namespace": "custom",
+                "key": "delivery_day",
+                "type": "single_line_text_field",
+                "value": str(delivery_day),
+            },
+            {
+                "ownerId": f"gid://shopify/Order/{order_id}",
+                "namespace": "custom",
+                "key": "delivery_time",
+                "type": "single_line_text_field",
+                "value": str(delivery_time),
+            },
+        ]
+    }
+
+    response = requests.post(
+        f"https://{_shop_domain()}/admin/api/"
+        f"{SHOPIFY_ADMIN_API_VERSION}/graphql.json",
+        json={
+            "query": mutation,
+            "variables": variables,
+        },
+        headers={
+            "Content-Type": "application/json",
+            "X-Shopify-Access-Token": _get_access_token(),
+        },
+        timeout=15,
+    )
+
+    if not response.ok:
+        raise RuntimeError(
+            f"Shopify delivery details request failed: "
+            f"HTTP {response.status_code} - {response.text}"
+        )
+
+    data = response.json()
+
+    if data.get("errors"):
+        raise RuntimeError(
+            f"Shopify GraphQL error: {data['errors']}"
+        )
+
+    result = (
+        data.get("data", {})
+        .get("metafieldsSet", {})
+    )
+
+    user_errors = result.get("userErrors", [])
+
+    if user_errors:
+        raise RuntimeError(
+            f"Shopify delivery metafield error: {user_errors}"
+        )
+
+    return result.get("metafields", [])
