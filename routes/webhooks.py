@@ -1,6 +1,9 @@
 import json
 from datetime import datetime
 
+import logging
+logger = logging.getLogger(__name__)
+
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from sqlalchemy.orm import Session
 
@@ -300,9 +303,11 @@ async def recharge_charge_paid(request: Request):
     except HTTPException:
         raise
 
-    except Exception as exc:
-        return {
-            "status": "error",
-            "error": str(exc),
-            "error_type": type(exc).__name__,
-        }
+    except Exception:
+        logger.exception(
+            "Recharge charge processing failed"
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Recharge charge processing failed",
+        )
