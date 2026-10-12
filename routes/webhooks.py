@@ -231,12 +231,15 @@ async def recharge_charge_paid(request: Request):
         charge_type = body.get("type")
         charge_status = body.get("status")
 
-        if str(charge_type).lower() != "recurring":
+        
+        if str(charge_type).lower() not in {"checkout", "recurring"}:
             return {
                 "status": "ignored",
-                "reason": "not_recurring",
+                "reason": "unsupported_charge_type",
                 "charge_id": charge_id,
+                "type": charge_type,
             }
+
 
         if str(charge_status).lower() != "success":
             return {
