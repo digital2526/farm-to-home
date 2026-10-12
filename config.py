@@ -53,7 +53,10 @@ SHOPIFY_ADMIN_API_VERSION = os.getenv(
     "2026-07",
 )
 
-SHOPIFY_WEBHOOK_SECRET = SHOPIFY_API_SECRET
+SHOPIFY_WEBHOOK_SECRET = os.getenv("SHOPIFY_WEBHOOK_SECRET")
+
+if not SHOPIFY_WEBHOOK_SECRET:
+    raise RuntimeError("SHOPIFY_WEBHOOK_SECRET is not configured.")
 
 # ==========================================
 # Database
