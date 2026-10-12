@@ -291,6 +291,16 @@ async def recharge_charge_paid(request: Request):
             delivery_time=delivery_details["delivery_time"],
         )
 
+
+        logger.info(
+            "Recharge delivery metafields updated: charge_id=%s, shopify_order_id=%s, delivery_date=%s, delivery_day=%s",
+            charge_id,
+            shopify_order_id,
+            delivery_details["delivery_date"],
+            delivery_details["delivery_day"],
+        )
+
+
         return {
             "status": "success",
             "charge_id": charge_id,
