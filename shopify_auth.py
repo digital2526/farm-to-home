@@ -96,6 +96,11 @@ async def verify_shopify_proxy(request: Request) -> str:
         message.encode("utf-8"),
         hashlib.sha256,
     ).hexdigest()
+    
+    print(
+        "APP PROXY SIGNATURE MATCH:",
+        hmac.compare_digest(calculated_signature, signature),
+    )
 
     if not hmac.compare_digest(
         calculated_signature,
