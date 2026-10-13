@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from sqlalchemy.orm import Session
 
@@ -8,6 +9,8 @@ from services.shopify_webhooks import process_paid_order
 from services.webhook_security import verify_shopify_webhook
 from repositories.webhook_repository import register_delivery
 
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/webhooks",
@@ -92,20 +95,26 @@ async def orders_paid(
     # ---------------------------------------------------------
     # 6. Only parse the JSON after HMAC verification.
     # ---------------------------------------------------------
-    order = ShopifyOrderPaid.model_validate_json(body)
+    try:
+        order = ShopifyOrderPaid.model_validate_json(body)
 
-    # ---------------------------------------------------------
-    # 7. Process the verified Shopify order.
-    #
-    # process_paid_order() -> award_seeds()
-    # award_seeds() commits the transaction.
-    # ---------------------------------------------------------
+        result = process_paid_order(
+            db=db,
+            order=order,
+        )
 
-    result = process_paid_order(
-        db=db,
-        order=order,
-    )
+        db.commit()
+        logger.info(
+            "Shopify orders/paid result: event_id=%s result=%s",
+            x_shopify_event_id,
+            result,
+        )
+        return result
 
-    db.commit()
-
-    return result
+    except Exception:
+        db.rollback()
+        logger.exception(
+            "Shopify orders/paid processing failed: event_id=%s",
+            x_shopify_event_id,
+        )
+        raise
