@@ -3,20 +3,19 @@
 
 client_id = "8d574fa9162eea1e5916e6020b4968bd"
 name = "Farm to Home Add Extras"
-application_url = "https://example.com"
+application_url = "https://nurses-wait-connect-selection.trycloudflare.com"
 embedded = true
 
 [webhooks]
-api_version = "2026-07"
+api_version = "2027-01"
 
 [access_scopes]
-# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "read_orders,read_products,write_orders"
+scopes = "read_orders,read_products,write_orders,write_app_proxy"
 optional_scopes = [ ]
 use_legacy_install_flow = false
 
 [auth]
-redirect_urls = [ ]
+redirect_urls = ["https://shopify.dev/apps/default-app-home/api/auth"]
 
 [app_proxy]
 url = "https://p01--recharge-add-extras--yj8tfgj8dpk9.code.run"
