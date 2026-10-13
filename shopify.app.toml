@@ -1,6 +1,7 @@
+
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = "4eeb8f5d562df7047476bd288d0d6cb8"
+client_id = "8d574fa9162eea1e5916e6020b4968bd"
 name = "Farm to Home Add Extras"
 application_url = "https://example.com"
 embedded = true
