@@ -81,7 +81,16 @@ async def verify_shopify_proxy(request: Request) -> str:
     )
 
     message = "".join(sorted_params)
-
+    
+    print("APP PROXY SIGNING DEBUG:", {
+        "parameter_keys": sorted(grouped_params.keys()),
+        "parameter_count": len(grouped_params),
+        "has_path_prefix": "path_prefix" in grouped_params,
+        "has_shop": "shop" in grouped_params,
+        "has_timestamp": "timestamp" in grouped_params,
+        "canonical_message_length": len(message),
+    })
+    
     calculated_signature = hmac.new(
         SHOPIFY_API_SECRET.encode("utf-8"),
         message.encode("utf-8"),
