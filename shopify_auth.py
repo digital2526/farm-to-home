@@ -47,6 +47,16 @@ async def verify_shopify_proxy(request: Request) -> str:
         grouped_params[key].append(value)
 
     signature = request.query_params.get("signature")
+    
+    print("APP PROXY DEBUG:", {
+        "path": request.url.path,
+        "query_keys": sorted(request.query_params.keys()),
+        "has_signature": bool(signature),
+        "has_timestamp": bool(request.query_params.get("timestamp")),
+        "has_customer_id": bool(
+            request.query_params.get("logged_in_customer_id")
+        ),
+    })
 
     if not signature:
         raise HTTPException(
