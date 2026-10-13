@@ -57,6 +57,13 @@ async def verify_shopify_proxy(request: Request) -> str:
             request.query_params.get("logged_in_customer_id")
         ),
     })
+    
+    print(
+        "APP PROXY SECRET FINGERPRINT:",
+        hashlib.sha256(
+            SHOPIFY_API_SECRET.encode("utf-8")
+        ).hexdigest()[:12],
+    )
 
     if not signature:
         raise HTTPException(
