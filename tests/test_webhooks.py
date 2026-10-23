@@ -165,6 +165,10 @@ def test_valid_webhook_is_processed(client, monkeypatch):
         "routes.webhooks.SHOPIFY_WEBHOOK_SECRET",
         SECRET,
     )
+    monkeypatch.setattr(
+        "routes.webhooks.set_order_delivery_details",
+        mock_set_order_delivery_details,
+    )
     
     response = client.post(
         "/webhooks/orders-paid",
@@ -187,6 +191,10 @@ def test_duplicate_webhook_delivery_is_rejected_as_duplicate(
     monkeypatch.setattr(
         "routes.webhooks.SHOPIFY_WEBHOOK_SECRET",
         SECRET,
+    )
+    monkeypatch.setattr(
+        "routes.webhooks.set_order_delivery_details",
+        mock_set_order_delivery_details,
     )
 
     headers = signed_headers(

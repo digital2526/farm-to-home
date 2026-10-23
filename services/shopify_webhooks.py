@@ -9,10 +9,113 @@ from recharge import (
     get_subscriptions,
 )
 
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
 
 PLAN_PARENT_PROPERTY = "_plan_parent"
 PLAN_VARIANT_IDS_PROPERTY = "_plan_item_variant_ids"
 PLAN_ORDER_ID_PROPERTY = "_plan_order_id"
+
+PORTUGAL_TZ = ZoneInfo("Europe/Lisbon")
+
+
+
+def calculate_delivery_details(created_at):
+    """
+    Calculate delivery information based on the order/charge
+    creation time in Europe/Lisbon.
+
+    Cut-off:
+    Sunday 23:59 Lisbon time.
+
+    Home delivery:
+    Thursday following the cut-off.
+
+    Pickup:
+    Wednesday before that Thursday.
+    """
+
+    if created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=PORTUGAL_TZ)
+
+    local_dt = created_at.astimezone(PORTUGAL_TZ)
+
+    # Monday = 0 ... Sunday = 6
+    days_until_sunday = 6 - local_dt.weekday()
+
+    cutoff_date = local_dt.date() + timedelta(
+        days=days_until_sunday
+    )
+
+    cutoff = datetime(
+        cutoff_date.year,
+        cutoff_date.month,
+        cutoff_date.day,
+        23,
+        59,
+        59,
+        tzinfo=PORTUGAL_TZ,
+    )
+
+    # If we're already past this Sunday's cut-off,
+    # use the following Sunday.
+    if local_dt > cutoff:
+        cutoff_date += timedelta(days=7)
+
+    # Thursday immediately after Sunday
+    delivery_date = cutoff_date + timedelta(days=4)
+
+    # Wednesday immediately before Thursday
+    pickup_date = delivery_date - timedelta(days=1)
+
+    return {
+        "home": {
+            "delivery_date": delivery_date,
+            "delivery_day": "thursday",
+            "delivery_time": "Durante o dia · DPD Fresh",
+        },
+        "pickup": {
+            "delivery_date": pickup_date,
+            "delivery_day": "wednesday",
+            "delivery_time": "14:00-21:00",
+        },
+    }
+
+def get_order_delivery_details(order):
+    """
+    Calculate delivery details for a Shopify order.
+
+    Shipping address present:
+        Thursday home delivery.
+
+    No shipping address:
+        Wednesday pickup.
+    """
+
+    if not order.created_at:
+        raise RuntimeError(
+            f"Shopify order {order.id} is missing created_at."
+        )
+
+    try:
+        created_at = datetime.fromisoformat(
+            order.created_at.replace("Z", "+00:00")
+        )
+    except ValueError as exc:
+        raise RuntimeError(
+            f"Invalid Shopify created_at for order {order.id}: "
+            f"{order.created_at}"
+        ) from exc
+
+    delivery_options = calculate_delivery_details(
+        created_at
+    )
+
+    if order.shipping_address:
+        return delivery_options["home"]
+
+    return delivery_options["pickup"]
 
 
 def _properties_dict(properties):
@@ -84,10 +187,15 @@ def _get_existing_plan_items(subscriptions, order_id):
 
 
 
-def process_paid_order(db: Session, order):
+def process_paid_order(
+    db: Session,
+    order,
+):
     """
     Verify the Weekly Meal Plan parent subscription in Recharge.
     Do not create individual meal subscriptions.
+
+    Non-Weekly-Plan orders are ignored.
     """
     del db
 
@@ -100,13 +208,11 @@ def process_paid_order(db: Session, order):
             "order_id": order.id,
         }
 
-    # Preserve existing customer validation.
     if not order.customer:
         raise RuntimeError(
             f"Weekly Meal Plan order {order.id} has no customer."
         )
 
-    # Preserve validation of the selected meal variants.
     raw_variant_ids = properties.get(PLAN_VARIANT_IDS_PROPERTY)
 
     if not raw_variant_ids:
@@ -131,7 +237,6 @@ def process_paid_order(db: Session, order):
             f"Expected exactly 5 meal variants, received {len(variant_ids)}."
         )
 
-    # Find the existing Recharge customer.
     recharge_customer = get_customer_by_shopify_id(
         order.customer.id
     )
@@ -143,8 +248,6 @@ def process_paid_order(db: Session, order):
         )
 
     recharge_customer_id = recharge_customer["id"]
-
-    # Preserve the retry logic for the parent subscription.
     parent_subscription = None
 
     for attempt in range(8):
@@ -164,7 +267,6 @@ def process_paid_order(db: Session, order):
             "Recharge Weekly Meal Plan parent subscription was not found."
         )
 
-    # Validate the parent subscription without creating child subscriptions.
     address_id = parent_subscription.get("address_id")
     next_charge_date = parent_subscription.get(
         "next_charge_scheduled_at"
