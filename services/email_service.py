@@ -1,5 +1,6 @@
 from pathlib import Path
 import smtplib
+import logging
 
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -13,6 +14,7 @@ from config import (
     ADMIN_EMAIL,
 )
 
+logger = logging.getLogger(__name__)
 
 TEMPLATE_DIR = (
     Path(__file__).resolve().parent.parent
@@ -101,6 +103,30 @@ class EmailService:
         Send reward confirmation email to the customer.
         """
 
+        to_email = str(
+            getattr(customer, "email", "") or ""
+        ).strip()
+
+        domain = (
+            to_email.rsplit("@", 1)[-1].lower()
+            if "@" in to_email
+            else ""
+        )
+
+        placeholder_domains = {
+            "example.com",
+            "example.org",
+            "example.net",
+            "example.invalid",
+        }
+
+        if not to_email or domain in placeholder_domains:
+            logger.warning(
+                "Skipping reward email for placeholder address; domain=%s",
+                domain or "missing",
+            )
+            return False
+
         context = {
             "customer_name": customer.email,
             "reward_name": reward.name,
@@ -115,7 +141,7 @@ class EmailService:
         )
 
         return EmailService.send_email(
-            to_email=customer.email,
+            to_email=to_email,
             subject=f"🌱 Your Terramay Reward - {reward.name}",
             html_body=html,
         )
