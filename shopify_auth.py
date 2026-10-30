@@ -122,6 +122,9 @@ async def verify_shopify_proxy(request: Request) -> str:
         == "true"
     )
 
+    print("APP PROXY BYPASS VALUE:", repr(os.getenv("TEMP_DISABLE_PROXY_SIGNATURE")))
+    print("APP PROXY BYPASS ENABLED:", demo_bypass)
+
     if not signature_valid and not demo_bypass:
         raise HTTPException(
             status_code=401,
