@@ -75,20 +75,10 @@ async def verify_shopify_proxy(request: Request) -> str:
         ).hexdigest()[:12],
     )
 
-    #if not signature:
-        #raise HTTPException(
-            #status_code=401,
-            #detail="Missing Shopify signature.",
-       # )
-    demo_bypass = (
-        os.getenv("TEMP_DISABLE_PROXY_SIGNATURE", "").strip().lower()
-        == "true"
-    )
-
-    if not signature_valid and not demo_bypass:
+    if not signature:
         raise HTTPException(
             status_code=401,
-            detail="Invalid Shopify signature.",
+            detail="Missing Shopify signature.",
         )
 
     # Shopify canonicalization:
@@ -101,33 +91,33 @@ async def verify_shopify_proxy(request: Request) -> str:
     )
 
     message = "".join(sorted_params)
-    
+
     print("APP PROXY SIGNING DEBUG:", {
         "parameter_keys": sorted(grouped_params.keys()),
         "parameter_count": len(grouped_params),
-        "has_path_prefix": "path_prefix" in grouped_params,
-        "has_shop": "shop" in grouped_params,
-        "has_timestamp": "timestamp" in grouped_params,
         "canonical_message_length": len(message),
     })
-    
+
     calculated_signature = hmac.new(
         SHOPIFY_API_SECRET.encode("utf-8"),
         message.encode("utf-8"),
         hashlib.sha256,
     ).hexdigest()
-    
-    print(
-        "APP PROXY SIGNATURE MATCH:",
-        hmac.compare_digest(calculated_signature, signature),
-    )
 
     signature_valid = hmac.compare_digest(
         calculated_signature,
         signature,
     )
 
-    if not signature_valid:
+    demo_bypass = (
+        os.getenv("TEMP_DISABLE_PROXY_SIGNATURE", "").strip().lower()
+        == "true"
+    )
+
+    print("APP PROXY SIGNATURE MATCH:", signature_valid)
+    print("APP PROXY BYPASS ENABLED:", demo_bypass)
+
+    if not signature_valid and not demo_bypass:
         raise HTTPException(
             status_code=401,
             detail="Invalid Shopify signature.",
