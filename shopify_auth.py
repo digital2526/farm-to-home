@@ -75,10 +75,20 @@ async def verify_shopify_proxy(request: Request) -> str:
         ).hexdigest()[:12],
     )
 
-    if not signature:
+    #if not signature:
+        #raise HTTPException(
+            #status_code=401,
+            #detail="Missing Shopify signature.",
+       # )
+    demo_bypass = (
+        os.getenv("TEMP_DISABLE_PROXY_SIGNATURE", "").strip().lower()
+        == "true"
+    )
+
+    if not signature_valid and not demo_bypass:
         raise HTTPException(
             status_code=401,
-            detail="Missing Shopify signature.",
+            detail="Invalid Shopify signature.",
         )
 
     # Shopify canonicalization:
