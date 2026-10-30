@@ -67,11 +67,11 @@ async def rewards(
 @router.post("/redeem")
 @limiter.limit("5/minute")
 async def redeem(
-    http_request: Request,
+    request: Request,
     body: RedeemRewardRequest,
     db: Session = Depends(get_db),
 ):
-    shopify_customer_id = await verify_shopify_proxy(http_request)
+    shopify_customer_id = await verify_shopify_proxy(request)
 
     customer = redeem_reward(
         db=db,
